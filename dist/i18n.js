@@ -3,29 +3,9 @@
 // Non-English translations are best-effort and need native-speaker review before any real
 // use (reviewed:false) — matching the deck's validation posture. English is the source.
 
-export const SUPPORTED_LANGUAGES = [
-  { code: 'en', label: 'English', native: 'English', reviewed: true },
-  { code: 'es', label: 'Spanish', native: 'Español', reviewed: false },
-  { code: 'zh', label: 'Chinese', native: '中文', reviewed: false },
-  { code: 'ko', label: 'Korean', native: '한국어', reviewed: false },
-  { code: 'tl', label: 'Tagalog', native: 'Tagalog', reviewed: false },
-  { code: 'vi', label: 'Vietnamese', native: 'Tiếng Việt', reviewed: false },
-  { code: 'hy', label: 'Armenian', native: 'Հայերեն', reviewed: false },
-  { code: 'ar', label: 'Arabic', native: 'العربية', rtl: true, reviewed: false },
-  { code: 'ru', label: 'Russian', native: 'Русский', reviewed: false },
-];
-
-const TEMPLATES = {
-  en: 'EXERCISE ONLY — not a real emergency. {area}: a wildfire evacuation exercise is in progress. In a real event, follow the official instructions from your local emergency authority. This is a drill and not an evacuation order.',
-  es: 'SIMULACRO SOLAMENTE — no es una emergencia real. {area}: hay un simulacro de evacuación por incendio forestal en curso. En un evento real, siga las instrucciones oficiales de su autoridad local de emergencias. Esto es un simulacro y no una orden de evacuación.',
-  zh: '仅为演习 — 并非真实紧急情况。{area}：正在进行野火疏散演习。如遇真实事件，请遵循当地应急管理部门的官方指示。这是演习，并非疏散命令。',
-  ko: '훈련 전용 — 실제 긴급 상황이 아닙니다. {area}: 산불 대피 훈련이 진행 중입니다. 실제 상황에서는 지역 긴급 당국의 공식 지시를 따르십시오. 이것은 훈련이며 대피 명령이 아닙니다.',
-  tl: 'PAGSASANAY LAMANG — hindi tunay na emerhensiya. {area}: may isinasagawang pagsasanay sa paglikas dahil sa wildfire. Sa totoong pangyayari, sundin ang opisyal na tagubilin mula sa inyong lokal na awtoridad sa emerhensiya. Ito ay pagsasanay at hindi utos na lumikas.',
-  vi: 'CHỈ LÀ DIỄN TẬP — không phải tình huống khẩn cấp thật. {area}: đang diễn ra cuộc diễn tập sơ tán vì cháy rừng. Trong sự kiện thật, hãy làm theo hướng dẫn chính thức từ cơ quan khẩn cấp địa phương của bạn. Đây là diễn tập, không phải lệnh sơ tán.',
-  hy: 'ՄԻԱՅՆ ՎԱՐԺԱՆՔ — սա իրական արտակարգ իրավիճակ չէ: {area}: ընթանում է անտառային հրդեհի տարհանման վարժանք: Իրական դեպքում հետևեք ձեր տեղական արտակարգ իրավիճակների մարմնի պաշտոնական ցուցումներին: Սա վարժանք է, ոչ թե տարհանման հրաման:',
-  ar: 'تدريب فقط — ليست حالة طوارئ حقيقية. {area}: يجري حالياً تدريب على الإخلاء بسبب حريق هائل. في حالة حقيقية، اتبع التعليمات الرسمية من سلطة الطوارئ المحلية لديك. هذا تدريب وليس أمراً بالإخلاء.',
-  ru: 'ТОЛЬКО УЧЕНИЯ — это не настоящая чрезвычайная ситуация. {area}: проводятся учения по эвакуации при лесном пожаре. В реальной ситуации следуйте официальным указаниям местных экстренных служб. Это учения, а не приказ об эвакуации.',
-};
+import catalogue from './data/alert-templates.json' with {type:'json'};
+export const SUPPORTED_LANGUAGES=catalogue.languages;
+export const TEMPLATES=catalogue.templates;
 
 // ACS table C16001 groups several languages together; map each ACS code that has a
 // template to that template. Codes without a specific template (other Asian, German,
@@ -55,10 +35,22 @@ export function recommendedLanguages(selected) {
     const pop = Number(props.population) || 0;
     for (const lang of props.languages || []) {
       const code = ACS_TO_TEMPLATE[lang.code];
-      if (!code || code === 'en') continue;
+      if (!code || code === 'en' || !(Number(lang.share)>0)) continue;
       weight[code] = (weight[code] || 0) + pop * (Number(lang.share) || 0);
     }
   }
   const ranked = Object.keys(weight).sort((a, b) => weight[b] - weight[a]);
   return ['en', ...ranked];
+}
+
+// Sending scope is derived from selected areas, never from the preview tab.
+export function buildLanguagePlan(selected,mode='auto') {
+  if(!['auto','all'].includes(mode))throw new Error('Unknown language strategy');
+  const seen=new Set();const areas=[];
+  for(const item of selected||[]){const p=item.properties||item;if(seen.has(p.GEOID))continue;seen.add(p.GEOID);
+    const codes=mode==='all'?SUPPORTED_LANGUAGES.map(l=>l.code):recommendedLanguages([p]);
+    const gaps=(p.languages||[]).filter(l=>Number(l.share)>0&&(!isSupported(l.code)||/other|unspecified|slavic|indo-european/i.test(l.label||''))).map(l=>l.label||l.code);
+    areas.push({geoid:p.GEOID,name:p.name,demographics_source:p.demographics_source||'unknown',gaps,messages:codes.map(code=>({code,text:renderAlert(code,{area:p.name}),reviewed:languageMeta(code).reviewed,rtl:!!languageMeta(code).rtl}))});
+  }
+  return {mode,areas,languages:[...new Set(areas.flatMap(a=>a.messages.map(m=>m.code)))],message_count:areas.reduce((n,a)=>n+a.messages.length,0),requires_language_review:areas.some(a=>a.messages.some(m=>!m.reviewed)),has_illustrative_data:areas.some(a=>!a.demographics_source.startsWith('ACS')),has_coverage_gaps:areas.some(a=>a.gaps.length>0)};
 }

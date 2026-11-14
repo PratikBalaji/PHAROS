@@ -11,7 +11,7 @@ An MCP server that reviews wildfire evidence, selects real municipalities and di
 - Deterministic segment/circle intersection checks for the replay scenario; named approval, automatic draft invalidation on replay changes, browser-local activity, and JSON export.
 - Python FastAPI backend serves the dashboard, stores drafts/approvals/audit in SQLite, records exercise broadcasts, and supports Bedrock Converse tool use and ntfy test delivery.
 - A standalone read-only MCP server any agent can call for retrieval. It exposes four synthetic scenario tools plus **eight** live retrieval tools (satellite, weather, routing, camera, fire-weather alerts, fire perimeters, place boundaries, language demographics) and runs over stdio (local agents) or token-authenticated Streamable HTTP (remote agents). The Bedrock runner invokes the same service functions via Converse tool schemas; it does **not** currently connect to that server over MCP transport.
-- Real keyless open-data adapters — NASA FIRMS (satellite), Open-Meteo (weather), OSRM (routing), NWS `api.weather.gov` (fire-weather alerts), NIFC/WFIGS (fire perimeters), US Census TIGERweb (boundaries) — plus US Census ACS (language demographics, free key) and an AI-camera detection ingest adapter. Reachable as REST endpoints (see `/docs`) and through the MCP tools. When a source is unconfigured or unreachable, the tools return a clearly labeled synthetic fallback rather than fabricated live data.
+- Open-data adapters (some require keys) — NASA FIRMS (satellite), Open-Meteo (weather), OSRM (routing), NWS `api.weather.gov` (fire-weather alerts), NIFC/WFIGS (fire perimeters), US Census TIGERweb (boundaries) — plus US Census ACS (language demographics, free key) and an AI-camera detection ingest adapter. Reachable as REST endpoints (see `/docs`) and through the MCP tools. When a source is unconfigured or unreachable, the tools return a clearly labeled synthetic fallback rather than fabricated live data.
 
 ## Five-minute live presentation
 
@@ -137,7 +137,7 @@ Tests cover geometry, missing routes, exercise labels, review gates, expiration,
 
 ## Two-minute demo
 
-1. On the **Console**, select Glendale and Arcadia; watch the recommended languages shift to Armenian and Chinese (their real demographic split).
+1. On the **Console**, select Glendale and Arcadia; watch the recommended languages shift to Armenian and Chinese (currently illustrative splits until the dataset is rebuilt with Census data).
 2. Switch the alert language with the pills; note the per-language preview and the "pending native-speaker review" flag.
 3. Enter a reviewer name, confirm the exercise checkbox, and Broadcast — see the entry land in the broadcast log.
 4. Open the **Map** to show real NIFC fire perimeters and the highlighted districts; click a district to toggle it.
@@ -202,3 +202,9 @@ Build the hosted runtime with `npm ci && npm run build:sites`. `worker/assets.js
 Open **Map → Incident replay**. Choose Smoke signal, Wind context, then Road closure. Each step updates the same scenario hazard geometry, route statuses, and draft state. Stage changes invalidate any previous draft and approval. The closure excludes both candidates and the draft withholds route instructions. Click the scenario's draft button, enter a reviewer name, approve and record a hosted test. **Live explorer** is a separate mode: live perimeters and the cellular fire projection are not evidence for the deterministic replay.
 
 The replay also updates the offline schematic, so it remains demonstrable when external basemap assets are unavailable. Scenarios are synthetic exercises; the map's geographic placement is illustrative, not road-aligned navigation.
+
+## Readiness audit and multilingual batches
+
+The original vision is not fully implemented. Read [PLAN_AUDIT.md](docs/PLAN_AUDIT.md), [API_KEYS.md](docs/API_KEYS.md), and [CODEBASE_INDEX.md](docs/CODEBASE_INDEX.md) before configuring providers or making performance claims.
+
+The console now builds a **complete per-district language bundle** automatically. Select districts, choose Automatic per district or All 9 supported languages, review the plan and record one batch. Preview tabs do not affect the batch. The backend constructs and stores every localized message from canonical templates. Unsupported/grouped languages and illustrative demographics are disclosed. These are fixed exercise templates, not model translations or real notification delivery.
