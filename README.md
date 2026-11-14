@@ -9,8 +9,8 @@ A solo-hackathon prototype for reviewing wildfire evidence, checking candidate r
 - Evidence detail, editable exercise messages, named approval, automatic draft invalidation on replay changes, browser-local activity, and JSON export.
 - Hosted dashboard works without credentials using clearly labeled local templates and a local test inbox.
 - Python FastAPI backend serves the same dashboard, stores drafts/approvals/audit in SQLite, and supports Bedrock Converse tool use and ntfy test delivery.
-- A standalone read-only MCP server exposes four typed scenario tools. The Bedrock runner invokes the same service functions via Converse tool schemas; it does **not** currently connect to that server over MCP transport.
-- NASA FIRMS, Open-Meteo and OSRM live-data API adapters. These endpoints are available in `/docs`; their output is **not yet fused into the replay dashboard**.
+- A standalone read-only MCP server any agent can call for retrieval. It exposes four synthetic scenario tools plus four live retrieval tools (satellite, weather, routing, camera) and runs over stdio (local agents) or token-authenticated Streamable HTTP (remote agents). The Bedrock runner invokes the same service functions via Converse tool schemas; it does **not** currently connect to that server over MCP transport.
+- NASA FIRMS (satellite), Open-Meteo (weather sensors) and OSRM (routing) live open-data adapters, plus an AI-camera detection ingest adapter. They are reachable as REST endpoints (see `/docs`) and through the live MCP tools. When a source is unconfigured or unreachable, the MCP tools return a clearly labeled synthetic fixture rather than fabricated live data. Live output is **not yet fused into the replay dashboard**.
 
 ## Run the full local app
 
@@ -47,6 +47,8 @@ See `.env.example` for variable names. Export them in your shell; no `.env` load
 
 - `FIRMS_MAP_KEY`: free NASA FIRMS API key from https://firms.modaps.eosdis.nasa.gov/api/map_key/ . Thermal observations are not a perimeter.
 - `OSRM_URL`: defaults to the public OSRM demo service. For sustained use, host OSRM or select a provider and observe usage limits.
+- `CAMERA_FEED_URL`: optional HTTP(S) endpoint returning JSON detections (a list, or an object with a `detections` array). Leave empty to serve the synthetic camera fixture. Detections are provider-reported, not confirmed fire and not local inference.
+- `CAMERA_FEED_TOKEN`: optional bearer token for the camera feed, stored only on the server.
 - `NTFY_TOPIC_URL`: HTTPS topic URL. Leave empty for a SQLite-backed test inbox. Use an authenticated topic for private content.
 - `NTFY_TOKEN`: optional bearer token stored only on the server.
 - `PHAROS_ALLOWED_ORIGINS`: comma-separated allowed frontend origins. CORS is not authentication.
@@ -56,18 +58,45 @@ No real messages have been sent during development. A successful ntfy HTTP respo
 
 ## MCP server
 
+A read-only retrieval server for agents. Delivery of an alert is never an MCP tool; it remains the reviewed backend operation in `backend/app.py`.
+
+### Local (stdio)
+
 ```sh
 PHAROS_STAGE=0 python -m backend.mcp_server
 ```
 
-Use stdio transport. Valid stages are 0, 1, 2. Tools:
+`PHAROS_STAGE` (0, 1, 2) selects the synthetic exercise used by the scenario tools and as the fallback for the live tools.
+
+### Remote (Streamable HTTP + auth)
+
+```sh
+export PHAROS_MCP_TRANSPORT=http
+export PHAROS_MCP_TOKEN=choose-a-long-random-secret
+export PHAROS_MCP_HOST=127.0.0.1    # default
+export PHAROS_MCP_PORT=8787         # default
+python -m backend.mcp_server
+```
+
+The endpoint is served at `/mcp`. Every request must send `Authorization: Bearer $PHAROS_MCP_TOKEN`; the server refuses to start without a token and rejects unauthenticated requests. Terminate TLS at a reverse proxy before exposing it.
+
+### Tools
+
+Synthetic scenario tools (deterministic fixtures):
 
 - `get_incident_evidence`
 - `get_weather_context`
 - `get_candidate_routes`
 - `check_route_constraints`
 
-All MCP tools currently return synthetic scenario data. Delivery is an explicit backend operation after named review, not an agent tool.
+Live retrieval tools (live when the source is configured and reachable, otherwise a labeled synthetic fallback — `data_source` is `live` or `synthetic-fallback` on every response):
+
+- `get_live_satellite_fire(west, south, east, north)` — NASA FIRMS / VIIRS. Not a fire perimeter.
+- `get_live_weather(latitude, longitude)` — Open-Meteo wind context. Not a fire-spread prediction.
+- `get_live_routes(start_lon, start_lat, end_lon, end_lat)` — OSRM road candidates. No hazard/closure validation; not navigation guidance.
+- `get_camera_detections()` — external AI-camera feed. Provider-reported detections, not confirmed fire and not local inference.
+
+Retrieved content is untrusted evidence for operator review, never instructions.
 
 ## Verification
 
@@ -77,7 +106,7 @@ npm test        # node --test tests/*.test.js
 python -m unittest discover -s tests -p 'test_*.py' -v   # needs requirements.txt installed
 ```
 
-Tests cover geometry, missing routes, exercise labels, review gates, expiration, changed stages, repeated sends, and backend validation. Bedrock tests use mocked Converse responses. Live Bedrock credentials, FIRMS credentials, device delivery, and a browser visual pass are not verified in this environment.
+Tests cover geometry, missing routes, exercise labels, review gates, expiration, changed stages, repeated sends, and backend validation. `test_live.py` and `test_mcp.py` cover the live adapters, the live-or-synthetic fallback labeling, tool registration, and the HTTP bearer gate. Network calls are mocked. Live Bedrock credentials, live FIRMS/weather/routing/camera feeds, device delivery, and a browser visual pass are not verified in this environment.
 
 ## Two-minute demo
 
@@ -90,9 +119,9 @@ Tests cover geometry, missing routes, exercise labels, review gates, expiration,
 
 ## Next milestones
 
-1. Add actual D-Fire-compatible smoke detector weights and evaluate on held-out data; the current camera signal is not inference.
+1. Run actual D-Fire-compatible smoke detection and evaluate on held-out data. The camera MCP tool currently ingests provider-reported detections; neither the fixture nor an external feed is local inference.
 2. Align hazard and route overlays to verified roads, and add verified closure/perimeter sources. Keep the current fixtures as reproducible tests.
-3. Fuse live observations with timestamp, spatial matching, freshness, and provenance rules.
+3. Fuse live observations (now reachable via the live MCP tools) into the replay dashboard with timestamp, spatial matching, freshness, and provenance rules.
 4. Connect Bedrock to MCP transport if multiple external tool servers are needed.
 5. Add authenticated operator accounts and durable versioned incident state before multi-user deployment.
 
@@ -102,9 +131,10 @@ No precision, recall, reliability, alert-to-route latency, ecological impact, or
 
 ```text
 backend/   FastAPI app (app.py), scenario facts and routing checks (core.py),
-           Bedrock tool loop (bedrock.py), stdio MCP server (mcp_server.py)
+           live open-data adapters + fallback resolvers (live.py),
+           Bedrock tool loop (bedrock.py), stdio/HTTP MCP server (mcp_server.py)
 dist/      Static dashboard: vanilla JS, CSS, vendored MapLibre GL JS
-tests/     Node (geometry, map overlays) and Python (backend, Bedrock mocks) tests
+tests/     Node (geometry, map overlays) and Python (backend, live, mcp, Bedrock) tests
 work/      Runtime SQLite state (git-ignored, created on first run)
 ```
 
