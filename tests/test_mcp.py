@@ -52,6 +52,7 @@ class SyntheticToolTests(unittest.TestCase):
             'get_incident_evidence', 'get_weather_context', 'get_candidate_routes', 'check_route_constraints',
             'get_live_weather', 'get_live_satellite_fire', 'get_live_routes', 'get_camera_detections',
             'get_live_fire_weather_alerts', 'get_live_fire_perimeters', 'get_place_boundaries', 'get_language_demographics',
+            'get_evacuation_route',
         })
 
 

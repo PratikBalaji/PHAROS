@@ -40,7 +40,9 @@ For this repository's static dashboard and slides:
 5. Set **Output Directory** to `dist`.
 6. Deploy. Dashboard: `https://YOUR-DEPLOYMENT.vercel.app/`. Slides: `https://YOUR-DEPLOYMENT.vercel.app/presentation/`.
 
-The deck embeds the colocated app automatically. No URL change or additional service is required. This static deployment does not host the Python FastAPI backend. It is sufficient for the complete exercise workflow shown in the presentation.
+The deck embeds the colocated app automatically. No URL change or additional service is required.
+
+`vercel.json` also rewrites `/api/*` to `api/index.py`, a thin Python serverless function (evacuation routing, fire perimeters, weather) that reuses `backend/live.py`. This powers the 3D Map view's predictive rerouting on the deployed site. For live rerouting with true avoid-polygons, set `ORS_API_KEY` in the Vercel project's Environment Variables (free key at openrouteservice.org); without it the route falls back to keyless OSRM. The full FastAPI backend (Bedrock drafting, ntfy delivery) still runs separately — the serverless function is deliberately thin.
 
 If slides and app are on separate domains, **Demo URL** accepts your HTTPS deployment address. You can interact with the embedded app manually, but the presentation bridge requires the same origin. Prefer colocating the deck and app. Deployment protection, `X-Frame-Options: DENY`, or an incompatible CSP `frame-ancestors` policy can prevent embedding; do not remove protection broadly just for the deck. Use the same-origin arrangement or Open app fallback.
 

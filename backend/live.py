@@ -357,3 +357,138 @@ async def resolve_language_demographics(geoid=None, stage=0):
             'data_source': 'synthetic-fallback', 'fallback_reason': str(exc), 'is_estimate': True,
             'geoid': geoid, 'population_5plus': 24000, 'languages': _synthetic_languages(),
         }
+
+
+# =====================================================================
+# Evacuation routing with reroute around a projected-fire polygon.
+# ORS avoid_polygons when ORS_API_KEY is set; otherwise keyless OSRM
+# alternatives, rejecting any candidate that crosses the hazard. If an
+# endpoint is inside the hazard or no safe route exists, the route is
+# WITHHELD (safety) — this is exercise decision-support, not navigation.
+# =====================================================================
+
+ORS_DIRECTIONS_URL = 'https://api.openrouteservice.org/v2/directions/driving-car/geojson'
+_ROUTE_NOTE = 'Simplified exercise decision-support. Not authoritative navigation or an evacuation order.'
+
+
+def _ring_contains(ring, pt):
+    x, y = pt[0], pt[1]
+    inside = False
+    n = len(ring)
+    j = n - 1
+    for i in range(n):
+        xi, yi = ring[i][0], ring[i][1]
+        xj, yj = ring[j][0], ring[j][1]
+        if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / ((yj - yi) or 1e-12) + xi):
+            inside = not inside
+        j = i
+    return inside
+
+
+def _point_in_polygon(pt, polygon):
+    rings = (polygon or {}).get('coordinates') or []
+    if not rings or not _ring_contains(rings[0], pt):
+        return False
+    return not any(_ring_contains(hole, pt) for hole in rings[1:])
+
+
+def _ccw(a, b, c):
+    return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
+
+
+def _segments_cross(a, b, c, d):
+    return _ccw(a, c, d) != _ccw(b, c, d) and _ccw(a, b, c) != _ccw(a, b, d)
+
+
+def _line_intersects_polygon(line, polygon):
+    if any(_point_in_polygon(pt, polygon) for pt in line):
+        return True
+    for ring in (polygon or {}).get('coordinates') or []:
+        for i in range(len(ring) - 1):
+            for j in range(len(line) - 1):
+                if _segments_cross(line[j], line[j + 1], ring[i], ring[i + 1]):
+                    return True
+    return False
+
+
+def _route_feature(geometry, distance_m, duration_s, extra):
+    out = {'type': 'Feature', 'geometry': geometry,
+           'properties': {'distance_m': round(distance_m or 0), 'duration_s': round(duration_s or 0)}}
+    out['properties'].update(extra)
+    return out
+
+
+def _withheld(reason, candidates=0):
+    return {'source': 'evac-route', 'retrieved_at': _now(), 'data_source': 'computed',
+            'route': None, 'rerouted': False, 'withheld': True, 'reason': reason,
+            'candidates': candidates, 'note': _ROUTE_NOTE}
+
+
+async def _ors_evac_route(origin, dest, avoid, key):
+    body = {'coordinates': [origin, dest]}
+    if avoid:
+        body['options'] = {'avoid_polygons': avoid}
+    try:
+        async with httpx.AsyncClient(timeout=25, headers={'Authorization': key, 'Content-Type': 'application/json', 'Accept': 'application/geo+json'}) as client:
+            response = await client.post(ORS_DIRECTIONS_URL, json=body)
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, ValueError):
+        raise LiveDataError('OpenRouteService routing failed', status=502)
+    features = data.get('features') or []
+    if not features:
+        raise LiveDataError('OpenRouteService returned no route', status=502)
+    feat = features[0]
+    summary = (feat.get('properties') or {}).get('summary') or {}
+    route = _route_feature(feat['geometry'], summary.get('distance'), summary.get('duration'),
+                           {'engine': 'ors-avoid-polygons'})
+    return {'source': 'OpenRouteService', 'retrieved_at': _now(), 'data_source': 'live',
+            'route': route, 'rerouted': bool(avoid), 'withheld': False, 'candidates': 1, 'note': _ROUTE_NOTE}
+
+
+async def _osrm_evac_route(origin, dest, avoid):
+    base = os.getenv('OSRM_URL', 'https://router.project-osrm.org').rstrip('/')
+    coords = f'{origin[0]},{origin[1]};{dest[0]},{dest[1]}'
+    data = await _get_json(f'{base}/route/v1/driving/{coords}', {'alternatives': 'true', 'overview': 'full', 'geometries': 'geojson'})
+    if data.get('code') != 'Ok' or not data.get('routes'):
+        raise LiveDataError('Routing provider returned no usable routes', status=502)
+    routes = data['routes']
+    safe = [r for r in routes if not avoid or not _line_intersects_polygon(r['geometry']['coordinates'], avoid)]
+    if not safe:
+        return _withheld('Every candidate route crosses the projected fire. Route instructions withheld.', len(routes))
+    best = min(safe, key=lambda r: r.get('distance', 0))
+    rerouted = bool(avoid) and (best is not routes[0])
+    route = _route_feature(best['geometry'], best.get('distance'), best.get('duration'),
+                           {'engine': 'osrm-reject-intersecting'})
+    return {'source': 'OSRM', 'retrieved_at': _now(), 'data_source': 'live',
+            'route': route, 'rerouted': rerouted, 'withheld': False,
+            'candidates': len(routes), 'safe': len(safe), 'note': _ROUTE_NOTE}
+
+
+async def fetch_evac_route(origin, dest, avoid=None):
+    """origin/dest are [lon, lat]; avoid is a GeoJSON Polygon geometry or None."""
+    if avoid and _point_in_polygon(origin, avoid):
+        return _withheld('Origin is inside the projected fire. Shelter guidance required, not a route.')
+    if avoid and _point_in_polygon(dest, avoid):
+        return _withheld('Destination is inside the projected fire. Choose another assembly point.')
+    key = os.getenv('ORS_API_KEY')
+    if key:
+        try:
+            return await _ors_evac_route(origin, dest, avoid, key)
+        except LiveDataError:
+            pass  # fall back to keyless OSRM
+    return await _osrm_evac_route(origin, dest, avoid)
+
+
+async def resolve_evac_route(origin, dest, avoid=None):
+    try:
+        return await fetch_evac_route(origin, dest, avoid)
+    except LiveDataError as exc:
+        # Keep the safety guard even offline; otherwise draw a labeled straight-line placeholder.
+        if avoid and (_point_in_polygon(origin, avoid) or _point_in_polygon(dest, avoid)):
+            return _withheld('Endpoint inside the projected fire (offline).')
+        line = {'type': 'LineString', 'coordinates': [origin, dest]}
+        route = _route_feature(line, 0, 0, {'engine': 'synthetic-straight-line'})
+        return {'source': 'evac-route (synthetic fallback)', 'retrieved_at': _now(), 'data_source': 'synthetic-fallback',
+                'fallback_reason': str(exc), 'route': route, 'rerouted': False, 'withheld': False,
+                'candidates': 0, 'note': _ROUTE_NOTE}
