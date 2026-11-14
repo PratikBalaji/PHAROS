@@ -12,6 +12,10 @@ A solo-hackathon prototype for reviewing wildfire evidence, checking candidate r
 - A standalone read-only MCP server exposes four typed scenario tools. The Bedrock runner invokes the same service functions via Converse tool schemas; it does **not** currently connect to that server over MCP transport.
 - NASA FIRMS, Open-Meteo and OSRM live-data API adapters. These endpoints are available in `/docs`; their output is **not yet fused into the replay dashboard**.
 
+## Five-minute live presentation
+
+Open `/presentation/` on the dashboard deployment. The six-slide browser deck embeds this actual application, includes speaker notes and a rehearsal timer, and uses a 4:50 running order with a 10-second buffer. The embedded exercise is isolated from your normal browser workspace. Setup, Vercel deployment instructions, and demo cues are in [docs/PRESENTATION.md](docs/PRESENTATION.md).
+
 ## Run the full local app
 
 Python 3.11+ recommended. From this directory:
@@ -100,6 +104,6 @@ No precision, recall, reliability, alert-to-route latency, ecological impact, or
 
 ## Repository and deployment
 
-`dist/` contains the complete static dashboard. `.openai/hosting.json` identifies its private Sites deployment. Python services are run separately; static hosting does not run FastAPI. Source is stored in the Site source repository. For HackPrinceton submission, create the required public GitHub repository within the event rules and copy this source, excluding credentials and runtime state.
+`dist/` contains the complete static dashboard. `.openai/hosting.json` identifies its private Sites deployment. Python services are run separately; static hosting does not run FastAPI. Source is also available in the GitHub repository `PratikBalaji/PHAROS`. Check repository visibility against the event submission requirements; runtime state and credentials are excluded.
 
 External resources: Google Fonts (system-font fallback), CARTO Dark Matter vector style/tiles and OpenStreetMap data with on-map attribution. MapLibre GL JS 5.6.1 is vendored under its included license. The geographic map requires network access and WebGL. The interface remains vanilla JavaScript; this refactor does not add React.
