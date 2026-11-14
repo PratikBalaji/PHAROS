@@ -1,0 +1,11 @@
+export function pointInside(p,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[i],b=ring[j];if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])inside=!inside;}return inside;}
+function cross(a,b,c){return (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);}
+function on(a,b,p){return Math.abs(cross(a,b,p))<1e-10&&p[0]>=Math.min(a[0],b[0])-1e-10&&p[0]<=Math.max(a[0],b[0])+1e-10&&p[1]>=Math.min(a[1],b[1])-1e-10&&p[1]<=Math.max(a[1],b[1])+1e-10;}
+export function intersectsPolygon(coords,ring){return coords.some(p=>pointInside(p,ring))||coords.slice(1).some((b,i)=>ring.slice(1).some((d,j)=>{const a=coords[i],c=ring[j];return (cross(a,b,c)*cross(a,b,d)<0&&cross(c,d,a)*cross(c,d,b)<0)||on(a,b,c)||on(a,b,d)||on(c,d,a)||on(c,d,b)}));}
+export async function routeAround(b,upstream){let ring=null;if(b.avoid){if(b.avoid.type!=='Polygon'||!Array.isArray(b.avoid.coordinates?.[0])||b.avoid.coordinates[0].length<4||b.avoid.coordinates[0].length>10000)throw {status:422,detail:'A valid polygon is required'};ring=b.avoid.coordinates[0];if(!ring.every(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)))throw {status:422,detail:'Invalid polygon coordinates'};}
+ const withheld=reason=>({withheld:true,rerouted:false,route:null,reason,data_source:'live',source:'OSRM + supplied polygon check'});
+ if(ring&&(pointInside(b.origin,ring)||pointInside(b.dest,ring)))return withheld('Origin or destination lies in the supplied hazard');
+ const data=await upstream(`https://router.project-osrm.org/route/v1/driving/${b.origin.join(',')};${b.dest.join(',')}?alternatives=true&overview=full&geometries=geojson`);
+ if(data.code!=='Ok')return withheld('No road route returned');const routes=data.routes||[];const index=routes.findIndex(r=>r.geometry?.type==='LineString'&&(!ring||!intersectsPolygon(r.geometry.coordinates,ring)));
+ if(index<0)return withheld('All supplied candidates intersect the projected hazard');const r=routes[index];return {withheld:false,rerouted:index>0,data_source:'live',source:'OSRM + supplied polygon check',route:{type:'Feature',properties:{distance:r.distance,duration:r.duration},geometry:r.geometry},warning:'Exercise geometry check only; not authoritative navigation.'};
+}

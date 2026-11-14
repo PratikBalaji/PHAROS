@@ -6,3 +6,6 @@ __pycache__/
 *.pyc
 work/
 node_modules/
+
+worker/assets.js
+dist/server/
