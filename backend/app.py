@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from .core import create_draft, tool_result, check_routes
 from .broadcast import build_plan
+from . import gemini, langplan
 from .photon import delivery_config, send_photon, refresh_photon, PhotonError
 from uuid import uuid4
 from .live import (
@@ -36,6 +37,7 @@ with sqlite3.connect(DB_PATH) as db:
     db.execute('CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, payload TEXT NOT NULL)')
     db.execute('CREATE TABLE IF NOT EXISTS audit (time TEXT, action TEXT, draft_id TEXT)')
     db.execute('CREATE TABLE IF NOT EXISTS broadcasts (id TEXT PRIMARY KEY, payload TEXT NOT NULL)')
+    db.execute('CREATE TABLE IF NOT EXISTS sms_sends (request_id TEXT NOT NULL, code TEXT NOT NULL, state TEXT NOT NULL, status TEXT, receipt TEXT, PRIMARY KEY (request_id, code))')
 
 def save(d):
     with sqlite3.connect(DB_PATH) as db: db.execute('INSERT OR REPLACE INTO drafts VALUES (?,?)',(d['id'],json.dumps(d)))
@@ -57,7 +59,7 @@ class Approval(DraftRequest):
 
 @app.get('/api/health')
 def health():
-    return {'status':'ok','mode':'synthetic exercise','storage':'ephemeral-instance' if os.getenv('VERCEL') else 'local-sqlite','bedrock_configured':bool(os.getenv('BEDROCK_MODEL_ID')),'ntfy_configured':bool(os.getenv('NTFY_TOPIC_URL')),'firms_configured':bool(os.getenv('FIRMS_MAP_KEY')),'delivery':delivery_config()}
+    return {'status':'ok','mode':'synthetic exercise','storage':'ephemeral-instance' if os.getenv('VERCEL') else 'local-sqlite','bedrock_configured':bool(os.getenv('BEDROCK_MODEL_ID')),'ntfy_configured':bool(os.getenv('NTFY_TOPIC_URL')),'firms_configured':bool(os.getenv('FIRMS_MAP_KEY')),'delivery':delivery_config(),'gemini_configured':gemini.configured(),'ors_configured':bool(os.getenv('ORS_API_KEY'))}
 
 @app.get('/api/scenario')
 def scenario(stage: Literal[0,1,2]=0):
@@ -153,6 +155,77 @@ def get_broadcast(broadcast_id: str):
     with sqlite3.connect(DB_PATH) as db: row=db.execute('SELECT payload FROM broadcasts WHERE id=?',(broadcast_id,)).fetchone()
     if not row: raise HTTPException(404,'Bundle not found')
     return json.loads(row[0])
+
+class LanguagePlanRequest(BaseModel):
+    geoid: str=Field(min_length=3,max_length=40)
+
+@app.post('/api/console/language-plan')
+async def console_language_plan(body: LanguagePlanRequest):
+    # Gemini chooses the send languages from the district's demographic split; a share-based
+    # rule is the labeled fallback. Nothing is sent here.
+    try: return await langplan.resolve_language_plan(body.geoid)
+    except ValueError as e: raise HTTPException(422,str(e))
+
+class TranslateRequest(BaseModel):
+    geoid: str=Field(min_length=3,max_length=40)
+    languages: list[str]=Field(min_length=1,max_length=9)
+
+@app.post('/api/console/translate')
+async def console_translate(body: TranslateRequest):
+    # Gemini translates; the server adds the fixed exercise marker and flags review. Fixed templates are the fallback.
+    try: return await langplan.resolve_translations(body.geoid,body.languages)
+    except ValueError as e: raise HTTPException(422,str(e))
+
+class ConsoleSms(BaseModel):
+    request_id: str=Field(min_length=8,max_length=64,pattern=r'^[A-Za-z0-9_-]+$')
+    geoid: str=Field(min_length=3,max_length=40)
+    reviewer: str=Field(min_length=1,max_length=80)
+    reviewed: bool
+    texts: dict[str,str]=Field(min_length=1,max_length=9)
+
+def sms_result(code,row):
+    receipt=json.loads(row[2]) if row[2] else {}
+    state=row[0]
+    return {'code':code,'state':state,'status':'Delivery status uncertain; inspect Photon before retrying' if state=='sending' else row[1],'message_id':receipt.get('message_id'),'provider_status':receipt.get('provider_status')}
+
+@app.post('/api/console/send-sms')
+async def console_send_sms(body: ConsoleSms):
+    # Exercise only. Texts each reviewed, marker-prefixed version to the single configured SMS
+    # conversation (a stand-in for the district). One SMS per language, idempotent per request.
+    if not body.reviewed or not body.reviewer.strip(): raise HTTPException(400,'Named exercise review is required')
+    try: props=langplan.district(body.geoid)
+    except ValueError as e: raise HTTPException(422,str(e))
+    cat=langplan.catalogue()
+    for code,text in body.texts.items():
+        if code not in cat['templates'] or not text.startswith(langplan.marker(code,cat)) or props['name'] not in text or len(text)>1000:
+            raise HTTPException(400,'Each message must keep its exercise marker and name the district')
+    channel=delivery_config()
+    if not channel['configured']: raise HTTPException(503,'Delivery is not configured. Check the Integrations panel for missing server settings.')
+    if channel['provider'] not in ('photon','inbox'): raise HTTPException(409,'Console SMS requires the photon or inbox delivery provider')
+    results=[]
+    for code,text in body.texts.items():
+        with LOCK:
+            with sqlite3.connect(DB_PATH) as db:
+                row=db.execute('SELECT state,status,receipt FROM sms_sends WHERE request_id=? AND code=?',(body.request_id,code)).fetchone()
+                if not row: db.execute('INSERT INTO sms_sends (request_id,code,state) VALUES (?,?,?)',(body.request_id,code,'sending'))
+        if row: results.append({**sms_result(code,row),'duplicate':True}); continue
+        receipt=None
+        if channel['provider']=='photon':
+            try:
+                receipt=await send_photon(text,f'pharos-sms-{body.request_id}-{code}')
+                state,status='submitted',receipt['status']
+            except PhotonError as e:
+                if e.uncertain: state,status='uncertain','Delivery status uncertain; automatic resend blocked'
+                else:
+                    state,status='rejected',str(e)
+                    with sqlite3.connect(DB_PATH) as db: db.execute('DELETE FROM sms_sends WHERE request_id=? AND code=?',(body.request_id,code))
+        else: state,status='recorded','Recorded in backend test inbox'
+        if state!='rejected':
+            with sqlite3.connect(DB_PATH) as db: db.execute('UPDATE sms_sends SET state=?,status=?,receipt=? WHERE request_id=? AND code=?',(state,status,json.dumps(receipt) if receipt else None,body.request_id,code))
+        results.append({'code':code,'state':state,'status':status,'message_id':(receipt or {}).get('message_id'),'provider_status':(receipt or {}).get('provider_status'),'duplicate':False})
+    counts={k:sum(1 for r in results if r['state']==k) for k in ('submitted','recorded','uncertain','rejected','sending')}
+    audit(f"EXERCISE SMS {body.request_id} for {props['name']}: {len(results)} language(s), {counts['submitted']} submitted, {counts['recorded']} recorded, {counts['uncertain']+counts['sending']} uncertain, {counts['rejected']} rejected; reviewed by {body.reviewer.strip()}")
+    return {'request_id':body.request_id,'geoid':body.geoid,'name':props['name'],'channel':channel['provider'],'public_alert':False,'recipient':'configured test conversation (stands in for the district)','results':results,'counts':counts}
 
 @app.get('/api/audit')
 def audit_rows():

@@ -61,7 +61,7 @@ The model is asked to retrieve all four tools and return an incident brief with 
 
 ## Photon SMS
 
-Photon Beta SMS is implemented in both backends. See [setup and MCP connection instructions](docs/PHOTON_SETUP.md). Set `PHAROS_DELIVERY_PROVIDER=photon` and the project API key, project ID, sender User ID and SMS Space ID. The UI shows missing setup, sends only approved exercise drafts, and can refresh a provider delivery receipt. Multilingual bundles remain recorded exercises until recipient-to-language mapping is implemented.
+Photon Beta SMS is implemented in both backends. See [setup and MCP connection instructions](docs/PHOTON_SETUP.md). Set `PHAROS_DELIVERY_PROVIDER=photon` and the project API key, project ID, sender User ID and SMS Space ID. The UI shows missing setup, sends only approved exercise drafts, and can refresh a provider delivery receipt. The Console's per-district flow (live demographic split, Gemini-chosen languages, Gemini translation, then one exercise SMS per language) is described in the setup guide; it texts the single configured test conversation, and `GEMINI_API_KEY` is optional because a share-based rule and fixed templates are the labeled fallback. Recording a complete multilingual bundle remains a log entry until recipient-to-language mapping is implemented.
 
 ## Data and notifications
 
