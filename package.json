@@ -1,0 +1,1 @@
+{"name":"pharos-wildfire-relay","version":"0.1.0","private":true,"type":"module","scripts":{"test":"node --test tests/core.test.js","check":"node --check dist/app.js && node --check dist/core.js"}}
