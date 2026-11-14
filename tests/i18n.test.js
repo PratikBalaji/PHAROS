@@ -37,3 +37,10 @@ test('ACS codes without a template are ignored but English still returns', () =>
   const langs = recommendedLanguages([{ properties: { population: 1000, languages: [{ code: 'de', share: 0.9 }] } }]);
   assert.deepEqual(langs, ['en']);
 });
+
+test('automatic bundles localize each district separately and expose gaps',async()=>{
+ const {buildLanguagePlan}=await import('../dist/i18n.js');
+ const plan=buildLanguagePlan([{GEOID:'1',name:'Glendale',population:100,languages:[{code:'hy',share:.3},{code:'ot',label:'Other',share:.1}],demographics_source:'illustrative'},{GEOID:'2',name:'Arcadia',population:100,languages:[{code:'zh',share:.4}],demographics_source:'ACS 5-year'}]);
+ assert.deepEqual(plan.areas.map(a=>a.messages.map(m=>m.code)),[['en','hy'],['en','zh']]);assert.equal(plan.message_count,4);assert.equal(plan.has_coverage_gaps,true);assert.equal(plan.has_illustrative_data,true);assert.ok(plan.areas[0].messages.every(m=>m.text.includes('Glendale')));assert.ok(plan.areas[1].messages.every(m=>m.text.includes('Arcadia')));
+});
+test('all-languages mode creates nine versions per unique area',async()=>{const {buildLanguagePlan}=await import('../dist/i18n.js');const area={GEOID:'1',name:'A',languages:[]};const p=buildLanguagePlan([area,area],'all');assert.equal(p.message_count,9);assert.equal(p.areas.length,1);assert.equal(p.requires_language_review,true);assert.throws(()=>buildLanguagePlan([area],'invalid'))});

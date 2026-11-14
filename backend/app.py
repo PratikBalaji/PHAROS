@@ -15,6 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from .core import create_draft, tool_result, check_routes
+from .broadcast import build_plan
+from uuid import uuid4
 from .live import (
     LiveDataError, fetch_weather, fetch_firms, fetch_routes, fetch_camera_detections,
     resolve_nws_alerts, resolve_fire_perimeters, resolve_language_demographics, resolve_evac_route,
@@ -32,6 +34,7 @@ app.add_middleware(CORSMiddleware,allow_origins=origins,allow_methods=['GET','PO
 with sqlite3.connect(DB_PATH) as db:
     db.execute('CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, payload TEXT NOT NULL)')
     db.execute('CREATE TABLE IF NOT EXISTS audit (time TEXT, action TEXT, draft_id TEXT)')
+    db.execute('CREATE TABLE IF NOT EXISTS broadcasts (id TEXT PRIMARY KEY, payload TEXT NOT NULL)')
 
 def save(d):
     with sqlite3.connect(DB_PATH) as db: db.execute('INSERT OR REPLACE INTO drafts VALUES (?,?)',(d['id'],json.dumps(d)))
@@ -110,19 +113,26 @@ async def send(draft_id: str,body: DraftRequest):
 
 class Broadcast(BaseModel):
     reviewer: str=Field(min_length=1,max_length=80)
-    areas: list[str]=Field(min_length=1,max_length=64)
-    geoids: list[str]=Field(default_factory=list,max_length=64)
-    languages: list[str]=Field(min_length=1,max_length=20)
+    geoids: list[str]=Field(min_length=1,max_length=64)
+    mode: Literal['auto','all']='auto'
+    reviewed: bool
 
 @app.post('/api/broadcast')
 def broadcast(body: Broadcast):
-    # Exercise-only: records a reviewed broadcast per area. No real public alerting
-    # (no IPAWS/WEA), consistent with the whole prototype's posture.
-    if not body.reviewer.strip(): raise HTTPException(400,'Named review is required')
+    if not body.reviewed or not body.reviewer.strip(): raise HTTPException(400,'Named exercise review is required')
+    try: plan=build_plan(body.geoids,body.mode)
+    except ValueError as e: raise HTTPException(422,str(e))
+    record={'id':str(uuid4()),'created_at':datetime.now(timezone.utc).isoformat(),'reviewer':body.reviewer.strip(),'plan':plan,'public_alert':False,'status':'Recorded in backend exercise log'}
     with LOCK:
-        for area in body.areas:
-            audit(f'EXERCISE broadcast to {area} in {len(body.languages)} language(s) by {body.reviewer.strip()}')
-    return {'status':'Recorded (exercise)','areas':len(body.areas),'languages':body.languages,'public_alert':False}
+        with sqlite3.connect(DB_PATH) as db: db.execute('INSERT INTO broadcasts VALUES (?,?)',(record['id'],json.dumps(record)))
+        audit(f"EXERCISE bundle {record['id']}: {plan['message_count']} messages across {len(plan['areas'])} areas reviewed by {record['reviewer']}")
+    return record
+
+@app.get('/api/broadcasts/{broadcast_id}')
+def get_broadcast(broadcast_id: str):
+    with sqlite3.connect(DB_PATH) as db: row=db.execute('SELECT payload FROM broadcasts WHERE id=?',(broadcast_id,)).fetchone()
+    if not row: raise HTTPException(404,'Bundle not found')
+    return json.loads(row[0])
 
 @app.get('/api/audit')
 def audit_rows():
