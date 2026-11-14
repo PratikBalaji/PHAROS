@@ -52,7 +52,7 @@ fetch('data/districts.json').then(r=>r.json()).then(d=>{state.districts=d.featur
 initializeMap(id=>{const el=document.querySelector('[data-route="'+id+'"]');if(el)el.click()},geoid=>{const i=state.selectedAreas.indexOf(geoid);if(i>=0)state.selectedAreas.splice(i,1);else state.selectedAreas.push(geoid);persist();render()});
 function loadPerimeters(){fetch((state.api||'')+'/api/live/perimeters?limit=25').then(r=>r.ok?r.json():null).then(d=>{if(d&&Array.isArray(d.perimeters)&&d.perimeters.length){state.perimeters={type:'FeatureCollection',features:d.perimeters};updateMap(state)}}).catch(()=>{})}
 if(!presentationMode){loadPerimeters();loadWind()}
-if(!presentationMode&&(location.hostname==='127.0.0.1'||location.hostname==='localhost')){state.api=location.origin;api('/api/health').then(()=>{state.connected=true;loadPerimeters();render()}).catch(()=>{})}else if(state.api){api('/api/health').then(()=>{state.connected=true;loadPerimeters();render()}).catch(()=>{})}
+if(!presentationMode){state.api=state.api||location.origin;api('/api/health').then(health=>{if(health.status!=='ok')return;state.connected=true;loadPerimeters();render()}).catch(()=>{state.connected=false})}
 
 // Presentation controls operate on an isolated exercise session, never approvals or delivery.
 if(presentationMode&&window.parent!==window){

@@ -44,7 +44,7 @@ Demographics are **real ACS 5-year estimates when `CENSUS_API_KEY` is set**, oth
 
 Live fire-weather alerts (NWS) and fire perimeters (NIFC/WFIGS) render on the **Map** view when their hosts are reachable. These are real sources but keyless; the browser fetches perimeters from the backend (`/api/live/perimeters`). None of this asserts a civil evacuation order — NWS products are fire-*weather*, and true evacuation orders (FEMA IPAWS) require an authorized agency interface, which is out of scope.
 
-The hosted version is static. To use a remote Python backend, select Integrations → Connect backend. That backend needs HTTPS, appropriate CORS origins, and authentication at a reverse proxy. The prototype has **no application-level authentication** and must not be exposed openly. For a first demo, run it on loopback.
+Vercel uses two FastAPI services from the root `vercel.json`: `app` serves the dashboard and `api` serves the full API. The browser auto-detects its same-origin API. The separate Sites-hosted copy is static. To use a remote Python backend there, select Integrations → Connect backend. That backend needs HTTPS, appropriate CORS origins, and authentication at a reverse proxy. The prototype has **no application-level authentication** and must not be exposed openly. For a first demo, run it on loopback.
 
 ## Bedrock
 
@@ -74,7 +74,7 @@ See `.env.example` for variable names. Export them in your shell; no `.env` load
 - `NTFY_TOPIC_URL`: HTTPS topic URL. Leave empty for a SQLite-backed test inbox. Use an authenticated topic for private content.
 - `NTFY_TOKEN`: optional bearer token stored only on the server.
 - `PHAROS_ALLOWED_ORIGINS`: comma-separated allowed frontend origins. CORS is not authentication.
-- `PHAROS_DB`: optional SQLite path. Default: `work/pharos.sqlite3`.
+- `PHAROS_DB`: optional SQLite path. Local default: `work/pharos.sqlite3`. On Vercel the default is `/tmp/pharos/pharos.sqlite3`, which is ephemeral and instance-local. It cannot provide durable/shared draft or audit storage; a managed database is needed for reliable multi-instance workflows.
 
 No real messages have been sent during development. A successful ntfy HTTP response means provider acceptance, not device receipt. Requests with ambiguous delivery failures are not automatically resent. Sent drafts are idempotent and cannot be edited; create a new draft instead. Drafts expire after 15 minutes.
 
@@ -182,3 +182,9 @@ Licensed under the MIT License (see `LICENSE`).
 `dist/pharos-source.zip` is a bundled snapshot of the source offered by the dashboard's Integrations page. It is not regenerated automatically, so it can lag behind this repository.
 
 External resources: Google Fonts (system-font fallback), CARTO Dark Matter vector style/tiles and OpenStreetMap data with on-map attribution. MapLibre GL JS 5.6.1 is vendored under its included license. The geographic map requires network access and WebGL. The interface remains vanilla JavaScript; this refactor does not add React.
+
+## Vercel service deployment
+
+The root `vercel.json` routes `/api/*` to the FastAPI service rooted at `api/`, and everything else to the FastAPI service rooted at `.`. `index.py` and `api/index.py` expose the same backend implementation so routes do not drift. Remove any old Vercel project Output Directory override (`dist`) and redeploy using the service configuration. Verify `/api/health` returns JSON before testing the workflow. See [deployment notes](docs/PRESENTATION.md#host-on-vercel).
+
+The source configuration has been schema-checked and both ASGI entry points tested locally. This does not prove Vercel build success or provision a managed database.

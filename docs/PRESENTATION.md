@@ -31,18 +31,19 @@ The iframe persists across the two demo slides. Entering slide 3 loads the initi
 
 ## Host on Vercel
 
-For this repository's static dashboard and slides:
+The root `vercel.json` now defines two FastAPI services using the configuration supplied by the project owner:
 
-1. Import `PratikBalaji/PHAROS` into Vercel.
-2. Select **Other** as the framework preset.
-3. Keep the repository root as the root directory.
-4. Leave install/build commands empty (override an automatically inferred command if necessary).
-5. Set **Output Directory** to `dist`.
-6. Deploy. Dashboard: `https://YOUR-DEPLOYMENT.vercel.app/`. Slides: `https://YOUR-DEPLOYMENT.vercel.app/presentation/`.
+1. Import `PratikBalaji/PHAROS` into Vercel with repository root `.`.
+2. Let Vercel use `vercel.json` service definitions: `app` at `.` and `api` at `api/`.
+3. Clear any old dashboard **Output Directory = dist**, build-command or static-framework overrides. The root FastAPI app now serves `dist/` itself.
+4. Redeploy the latest commit. Dashboard: `/`; presentation: `/presentation/`; backend readiness: `/api/health`.
+5. Configure optional provider secrets only in Vercel environment variables. No credentials are required for the exercise template workflow.
 
-The deck embeds the colocated app automatically. No URL change or additional service is required.
+`index.py` exposes the root application. `api/index.py` exposes the full shared backend, including drafts, approval, broadcast, audit and live-data routes. The frontend discovers the same-origin API automatically. The embedded presentation intentionally stays in isolated local-template mode.
 
-`vercel.json` also rewrites `/api/*` to `api/index.py`, a thin Python serverless function (evacuation routing, fire perimeters, weather) that reuses `backend/live.py`. This powers the 3D Map view's predictive rerouting on the deployed site. For live rerouting with true avoid-polygons, set `ORS_API_KEY` in the Vercel project's Environment Variables (free key at openrouteservice.org); without it the route falls back to keyless OSRM. The full FastAPI backend (Bedrock drafting, ntfy delivery) still runs separately — the serverless function is deliberately thin.
+Vercel's filesystem is read-only except `/tmp`. The backend uses `/tmp/pharos/pharos.sqlite3` when `VERCEL` is set; this storage is ephemeral and instance-local, not durable or shared. A draft can disappear on a cold start or another instance. Use a managed database before relying on multi-request workflows across instances or durable audit history. The existing local backend retains its workspace SQLite database.
+
+This configuration validates against Vercel's published Draft 7 schema, but service provisioning and any account feature eligibility must be verified in the actual Vercel deployment. Repository tests cannot prove hosted build success.
 
 If slides and app are on separate domains, **Demo URL** accepts your HTTPS deployment address. You can interact with the embedded app manually, but the presentation bridge requires the same origin. Prefer colocating the deck and app. Deployment protection, `X-Frame-Options: DENY`, or an incompatible CSP `frame-ancestors` policy can prevent embedding; do not remove protection broadly just for the deck. Use the same-origin arrangement or Open app fallback.
 

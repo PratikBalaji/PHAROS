@@ -21,7 +21,9 @@ from .live import (
 )
 
 ROOT=Path(__file__).resolve().parents[1]
-DB_PATH=Path(os.getenv('PHAROS_DB',str(ROOT/'work'/'pharos.sqlite3')))
+# Vercel's application bundle is read-only. Its /tmp storage is ephemeral.
+DEFAULT_DB=Path('/tmp/pharos/pharos.sqlite3') if os.getenv('VERCEL') else ROOT/'work'/'pharos.sqlite3'
+DB_PATH=Path(os.getenv('PHAROS_DB',str(DEFAULT_DB)))
 DB_PATH.parent.mkdir(parents=True,exist_ok=True)
 LOCK=threading.Lock()
 app=FastAPI(title='PHAROS',version='0.1.0',description='Synthetic wildfire exercise and open-data adapters. Not an emergency dispatch service.')
@@ -51,7 +53,7 @@ class Approval(DraftRequest):
 
 @app.get('/api/health')
 def health():
-    return {'status':'ok','mode':'synthetic exercise','bedrock_configured':bool(os.getenv('BEDROCK_MODEL_ID')),'ntfy_configured':bool(os.getenv('NTFY_TOPIC_URL')),'firms_configured':bool(os.getenv('FIRMS_MAP_KEY'))}
+    return {'status':'ok','mode':'synthetic exercise','storage':'ephemeral-instance' if os.getenv('VERCEL') else 'local-sqlite','bedrock_configured':bool(os.getenv('BEDROCK_MODEL_ID')),'ntfy_configured':bool(os.getenv('NTFY_TOPIC_URL')),'firms_configured':bool(os.getenv('FIRMS_MAP_KEY'))}
 
 @app.get('/api/scenario')
 def scenario(stage: Literal[0,1,2]=0):
@@ -176,4 +178,6 @@ async def evac_route(body: EvacRequest):
     # Reroutes a real road route around a projected-fire polygon; withholds when unsafe.
     return await resolve_evac_route(body.origin,body.dest,body.avoid)
 
-app.mount('/',StaticFiles(directory=ROOT/'dist',html=True),name='dashboard')
+# API-only bundles may omit frontend assets; API startup must still succeed.
+if (ROOT/'dist').is_dir():
+    app.mount('/',StaticFiles(directory=ROOT/'dist',html=True),name='dashboard')
