@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from .core import create_draft, tool_result, check_routes
 from .live import (
     LiveDataError, fetch_weather, fetch_firms, fetch_routes, fetch_camera_detections,
-    resolve_nws_alerts, resolve_fire_perimeters, resolve_language_demographics,
+    resolve_nws_alerts, resolve_fire_perimeters, resolve_language_demographics, resolve_evac_route,
 )
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -165,5 +165,15 @@ async def perimeters(where: str='1=1', limit: int=Query(50,ge=1,le=500)):
 @app.get('/api/live/demographics')
 async def demographics(geoid: str=Query(min_length=7,max_length=10)):
     return await resolve_language_demographics(geoid=geoid)
+
+class EvacRequest(BaseModel):
+    origin: list[float]=Field(min_length=2,max_length=2)
+    dest: list[float]=Field(min_length=2,max_length=2)
+    avoid: dict|None=None
+
+@app.post('/api/evac-route')
+async def evac_route(body: EvacRequest):
+    # Reroutes a real road route around a projected-fire polygon; withholds when unsafe.
+    return await resolve_evac_route(body.origin,body.dest,body.avoid)
 
 app.mount('/',StaticFiles(directory=ROOT/'dist',html=True),name='dashboard')
