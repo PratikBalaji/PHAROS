@@ -1,6 +1,6 @@
 # PHAROS — Wildfire & Evacuation Relay
 
-A solo-hackathon prototype for reviewing wildfire evidence, selecting real municipalities and districts, drafting a reviewable **multilingual** exercise alert, and relaying it — with a separate map view backed by real fire-weather alerts and fire perimeters. Delivery stays **exercise-only**: no real public alert (IPAWS / WEA) is ever issued.
+An MCP server that reviews wildfire evidence, selects real municipalities and districts, drafts a reviewable **multilingual** exercise alert, and relays it—with a separate map view backed by real fire-weather alerts and fire perimeters. Delivery stays **exercise-only**: no real public alert (IPAWS / WEA) is ever issued.
 
 ## What works
 
