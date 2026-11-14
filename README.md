@@ -72,9 +72,9 @@ All MCP tools currently return synthetic scenario data. Delivery is an explicit 
 ## Verification
 
 ```sh
-node --check dist/app.js
-node --test tests/*.test.js
-python -m unittest discover -s tests -p 'test_*.py' -v
+npm run check   # syntax-check dist/app.js, core.js, geospatial.js
+npm test        # node --test tests/*.test.js
+python -m unittest discover -s tests -p 'test_*.py' -v   # needs requirements.txt installed
 ```
 
 Tests cover geometry, missing routes, exercise labels, review gates, expiration, changed stages, repeated sends, and backend validation. Bedrock tests use mocked Converse responses. Live Bedrock credentials, FIRMS credentials, device delivery, and a browser visual pass are not verified in this environment.
@@ -91,15 +91,27 @@ Tests cover geometry, missing routes, exercise labels, review gates, expiration,
 ## Next milestones
 
 1. Add actual D-Fire-compatible smoke detector weights and evaluate on held-out data; the current camera signal is not inference.
-2. Add a geographic map and verified closure/perimeter sources. Keep current schematic fixtures as reproducible tests.
+2. Align hazard and route overlays to verified roads, and add verified closure/perimeter sources. Keep the current fixtures as reproducible tests.
 3. Fuse live observations with timestamp, spatial matching, freshness, and provenance rules.
 4. Connect Bedrock to MCP transport if multiple external tool servers are needed.
 5. Add authenticated operator accounts and durable versioned incident state before multi-user deployment.
 
 No precision, recall, reliability, alert-to-route latency, ecological impact, or production emergency capability is claimed. This is an exercise prototype, not navigation or emergency guidance.
 
-## Repository and deployment
+## Repository layout
 
-`dist/` contains the complete static dashboard. `.openai/hosting.json` identifies its private Sites deployment. Python services are run separately; static hosting does not run FastAPI. Source is stored in the Site source repository. For HackPrinceton submission, create the required public GitHub repository within the event rules and copy this source, excluding credentials and runtime state.
+```text
+backend/   FastAPI app (app.py), scenario facts and routing checks (core.py),
+           Bedrock tool loop (bedrock.py), stdio MCP server (mcp_server.py)
+dist/      Static dashboard: vanilla JS, CSS, vendored MapLibre GL JS
+tests/     Node (geometry, map overlays) and Python (backend, Bedrock mocks) tests
+work/      Runtime SQLite state (git-ignored, created on first run)
+```
+
+## Deployment
+
+`dist/` contains the complete static dashboard, and the FastAPI backend also serves it. `.openai/hosting.json` identifies its private Sites deployment. Python services are run separately; static hosting does not run FastAPI. Keep credentials and runtime state (`.env*`, `work/`) out of version control; `.gitignore` already excludes them.
+
+`dist/pharos-source.zip` is a bundled snapshot of the source offered by the dashboard's Integrations page. It is not regenerated automatically, so it can lag behind this repository.
 
 External resources: Google Fonts (system-font fallback), CARTO Dark Matter vector style/tiles and OpenStreetMap data with on-map attribution. MapLibre GL JS 5.6.1 is vendored under its included license. The geographic map requires network access and WebGL. The interface remains vanilla JavaScript; this refactor does not add React.
