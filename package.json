@@ -5,6 +5,6 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "check": "node --check dist/app.js && node --check dist/core.js && node --check dist/geospatial.js"
+    "check": "node --check dist/app.js && node --check dist/core.js && node --check dist/geospatial.js && node --check dist/presentation/deck.js && node --check dist/presentation/config.js"
   }
 }
