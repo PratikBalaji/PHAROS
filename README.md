@@ -188,3 +188,17 @@ External resources: Google Fonts (system-font fallback), CARTO Dark Matter vecto
 The root `vercel.json` routes `/api/*` to the FastAPI service rooted at `api/`, and everything else to the FastAPI service rooted at `.`. `index.py` and `api/index.py` expose the same backend implementation so routes do not drift. Remove any old Vercel project Output Directory override (`dist`) and redeploy using the service configuration. Verify `/api/health` returns JSON before testing the workflow. See [deployment notes](docs/PRESENTATION.md#host-on-vercel).
 
 The source configuration has been schema-checked and both ASGI entry points tested locally. This does not prove Vercel build success or provision a managed database.
+
+## Published full-stack hackathon demo
+
+The private Sites deployment now serves both the frontend and a JavaScript Worker backend. The Worker uses a provisioned R2 bucket for durable exercise drafts, named approvals, test-inbox records and audit events. `/api/health` reports `runtime: cloudflare-worker` and `storage: durable-r2`. These records survive Worker instance restarts. Publication does not change the private audience.
+
+The hosted Worker supports the exercise draft/approve/send flow, exercise broadcasts, audit retrieval, weather, NWS alerts, NIFC perimeters, and OSRM alternatives checked against supplied hazard polygons. Delivery records a test inbox entry; it does not send SMS, ntfy, or official alerts. Bedrock inference and the Python MCP server remain in the FastAPI implementation and are **not running in the Worker**. The runtime reports these capabilities honestly. The original FastAPI/Vercel configuration remains available, but Vercel deployment access is not connected to this workspace.
+
+Build the hosted runtime with `npm ci && npm run build:sites`. `worker/assets.js` and `dist/server/` are generated and ignored. The build embeds the dashboard assets so the Worker handles static routes and API routes on the same origin. Never place secrets in generated assets.
+
+### Useful incident replay
+
+Open **Map → Incident replay**. Choose Smoke signal, Wind context, then Road closure. Each step updates the same scenario hazard geometry, route statuses, and draft state. Stage changes invalidate any previous draft and approval. The closure excludes both candidates and the draft withholds route instructions. Click the scenario's draft button, enter a reviewer name, approve and record a hosted test. **Live explorer** is a separate mode: live perimeters and the cellular fire projection are not evidence for the deterministic replay.
+
+The replay also updates the offline schematic, so it remains demonstrable when external basemap assets are unavailable. Scenarios are synthetic exercises; the map's geographic placement is illustrative, not road-aligned navigation.
