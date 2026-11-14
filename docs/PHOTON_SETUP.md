@@ -29,7 +29,7 @@ Once connected, inspect the existing project and SMS resources. Find the sending
 | `PHOTON_SENDER_ID` | Sending line's `pho_usr_…` ID |
 | `PHOTON_SPACE_ID` | Test recipient's existing SMS `pho_spc_…` conversation ID |
 
-Create a project-scoped key in the [Photon dashboard](https://app.beta.photon.codes). Set these in the runtime hosting settings, then redeploy. A local `.env` file is not loaded automatically; export values into the backend process. On Vercel, configure the API service's environment as well. Protect remote FastAPI with authentication; CORS alone is not access control. The existing Sites deployment already has owner-only access.
+Create a project-scoped key in the [Photon dashboard](https://app.beta.photon.codes). Set these in the runtime hosting settings, then redeploy. For local use, `python3 run.py` loads `.env` automatically; set `PHAROS_DELIVERY_PROVIDER=photon` to switch from the local test inbox. On Vercel, configure the API service's environment as well. Protect remote FastAPI with authentication; CORS alone is not access control. The existing Sites deployment already has owner-only access.
 
 An active SMS line and Photon platform authorization are required. Photon also requires campaign eligibility for off-network SMS recipients. See its [SMS documentation](https://photon.codes/docs/beta/messaging/sms); a configured API key cannot bypass provider provisioning or eligibility requirements.
 

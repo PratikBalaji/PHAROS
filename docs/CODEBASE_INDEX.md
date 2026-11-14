@@ -4,6 +4,7 @@
 | --- | --- |
 | `worker/photon.js`, `backend/photon.py` | Photon Beta SMS configuration, approved text submission and receipt lookup |
 | `docs/PHOTON_SETUP.md`, `.vscode/mcp.json` | Hosting setup and OAuth MCP client connection |
+| `run.py`, `docs/LOCAL_SETUP.md` | One-command local setup, .env loading and frontend/API startup |
 | `dist/app.js` | Console, replay, drafts, review actions, API requests, persisted browser UI state |
 | `dist/i18n.js` | Language ranking, per-district bundle planning, coverage-gap reporting |
 | `dist/data/alert-templates.json` | Shared canonical language metadata and fixed exercise templates, read by JS and Python |
