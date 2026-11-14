@@ -1,0 +1,6 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {hideBasemapLabel,overlayData,project} from '../dist/geospatial.js';
+test('map suppresses POI, road text, minor labels, retains regional context',()=>{for(const id of ['poi_park','poi_stadium','roadname_major','roadname_minor','place_suburbs','housenumber'])assert.equal(hideBasemapLabel({id,type:'symbol'}),true);assert.equal(hideBasemapLabel({id:'place_state',type:'symbol'}),false);assert.equal(hideBasemapLabel({id:'road_minor',type:'line'}),false);});
+test('synthetic geospatial hazards have closed rings and finite coordinates',()=>{for(const stage of [0,1,2]){const data=overlayData(stage);for(const feature of data.hazards.features){const ring=feature.geometry.coordinates[0];assert.equal(ring.length,73);assert.ok(Math.abs(ring[0][0]-ring[72][0])<1e-9);assert.ok(Math.abs(ring[0][1]-ring[72][1])<1e-9);assert.ok(ring.flat().every(Number.isFinite));}assert.equal(data.routes.features.length,2);}});
+test('map route statuses match scenario closure',()=>{assert.deepEqual(overlayData(0).routes.features.map(f=>f.properties.blocked),[true,false]);assert.deepEqual(overlayData(2).routes.features.map(f=>f.properties.blocked),[true,true]);assert.deepEqual(project([400,220]),[-118.23,34.22]);});

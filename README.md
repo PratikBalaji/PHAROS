@@ -4,7 +4,7 @@ A solo-hackathon prototype for reviewing wildfire evidence, checking candidate r
 
 ## What works
 
-- Responsive, dependency-free dashboard with a schematic incident map, layer controls, route details, and three replay stages.
+- Map-first tactical dashboard with a full-bleed MapLibre dark vector basemap, floating translucent panels, monospace telemetry, and three replay stages. POIs, road names, and minor labels are hidden programmatically; country, state, and selected city labels remain. Synthetic hazard/route overlays are not aligned to verified roads. An offline schematic remains available if the basemap cannot load.
 - Deterministic segment/circle intersection checks. Ridge Road is excluded initially; the closure scenario excludes both routes.
 - Evidence detail, editable exercise messages, named approval, automatic draft invalidation on replay changes, browser-local activity, and JSON export.
 - Hosted dashboard works without credentials using clearly labeled local templates and a local test inbox.
@@ -73,7 +73,7 @@ All MCP tools currently return synthetic scenario data. Delivery is an explicit 
 
 ```sh
 node --check dist/app.js
-node --test tests/core.test.js
+node --test tests/*.test.js
 python -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
@@ -102,4 +102,4 @@ No precision, recall, reliability, alert-to-route latency, ecological impact, or
 
 `dist/` contains the complete static dashboard. `.openai/hosting.json` identifies its private Sites deployment. Python services are run separately; static hosting does not run FastAPI. Source is stored in the Site source repository. For HackPrinceton submission, create the required public GitHub repository within the event rules and copy this source, excluding credentials and runtime state.
 
-External resources: Google Fonts for typography (system-font fallback); no map tile service is required by the schematic replay.
+External resources: Google Fonts (system-font fallback), CARTO Dark Matter vector style/tiles and OpenStreetMap data with on-map attribution. MapLibre GL JS 5.6.1 is vendored under its included license. The geographic map requires network access and WebGL. The interface remains vanilla JavaScript; this refactor does not add React.
