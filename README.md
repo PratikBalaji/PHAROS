@@ -12,6 +12,10 @@ A solo-hackathon prototype for reviewing wildfire evidence, selecting real munic
 - A standalone read-only MCP server any agent can call for retrieval. It exposes four synthetic scenario tools plus **eight** live retrieval tools (satellite, weather, routing, camera, fire-weather alerts, fire perimeters, place boundaries, language demographics) and runs over stdio (local agents) or token-authenticated Streamable HTTP (remote agents). The Bedrock runner invokes the same service functions via Converse tool schemas; it does **not** currently connect to that server over MCP transport.
 - Real keyless open-data adapters — NASA FIRMS (satellite), Open-Meteo (weather), OSRM (routing), NWS `api.weather.gov` (fire-weather alerts), NIFC/WFIGS (fire perimeters), US Census TIGERweb (boundaries) — plus US Census ACS (language demographics, free key) and an AI-camera detection ingest adapter. Reachable as REST endpoints (see `/docs`) and through the MCP tools. When a source is unconfigured or unreachable, the tools return a clearly labeled synthetic fallback rather than fabricated live data.
 
+## Five-minute live presentation
+
+Open `/presentation/` on the dashboard deployment. The six-slide browser deck embeds this actual application, includes speaker notes and a rehearsal timer, and uses a 4:50 running order with a 10-second buffer. The embedded exercise is isolated from your normal browser workspace. Setup, Vercel deployment instructions, and demo cues are in [docs/PRESENTATION.md](docs/PRESENTATION.md).
+
 ## Run the full local app
 
 Python 3.11+ recommended. From this directory:
@@ -154,15 +158,17 @@ backend/   FastAPI app (app.py), scenario facts and routing checks (core.py),
            live open-data adapters + fallback resolvers (live.py),
            Bedrock tool loop (bedrock.py), stdio/HTTP MCP server (mcp_server.py)
 dist/      Static dashboard: vanilla JS (app.js, core.js, geospatial.js, i18n.js),
-           CSS, vendored MapLibre GL JS, and data/districts.json (curated recipients)
+           CSS, vendored MapLibre GL JS, data/districts.json (curated recipients),
+           and presentation/ (five-minute browser deck)
 scripts/   build_districts.py — rebuilds dist/data/districts.json from TIGERweb + ACS
-tests/     Node (geometry, map overlays, i18n) and Python (backend, live, sources, mcp, Bedrock) tests
+docs/      PRESENTATION.md — presentation setup, deployment, and demo cues
+tests/     Node (geometry, map overlays, i18n, presentation) and Python (backend, live, sources, mcp, Bedrock) tests
 work/      Runtime SQLite state (git-ignored, created on first run)
 ```
 
 ## Deployment
 
-`dist/` contains the complete static dashboard, and the FastAPI backend also serves it. `.openai/hosting.json` identifies its private Sites deployment. Python services are run separately; static hosting does not run FastAPI. Keep credentials and runtime state (`.env*`, `work/`) out of version control; `.gitignore` already excludes them.
+`dist/` contains the complete static dashboard, and the FastAPI backend also serves it. `.openai/hosting.json` identifies its private Sites deployment. Python services are run separately; static hosting does not run FastAPI. Keep credentials and runtime state (`.env*`, `work/`) out of version control; `.gitignore` already excludes them. Source is also in the GitHub repository `PratikBalaji/PHAROS`; check its visibility against the event submission requirements.
 
 `dist/pharos-source.zip` is a bundled snapshot of the source offered by the dashboard's Integrations page. It is not regenerated automatically, so it can lag behind this repository.
 
