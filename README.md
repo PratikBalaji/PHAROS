@@ -6,7 +6,8 @@ A solo-hackathon prototype for reviewing wildfire evidence, selecting real munic
 
 - **Communications console (primary view)** — pick real municipalities and districts from a recipients rail, compose an exercise alert, and record a broadcast to a sent-alert log. The console is vanilla JS over a committed dataset of real boundaries, so it works offline.
 - **Demographic-driven multilingual drafting** — each selected district's recommended languages come from US Census ACS "language spoken at home" data; an operator can switch the alert among supported languages (English, Spanish, Chinese, Korean, Tagalog, Vietnamese, Armenian, Arabic, Russian). Non-English text is rendered from human-authored templates and flagged for native-speaker review.
-- **Map view** with a full-bleed MapLibre dark basemap now showing real NIFC/WFIGS fire perimeters and the district boundaries you are targeting (selected areas highlighted; click a district to toggle it), alongside the synthetic replay overlays. An offline schematic remains available if the basemap cannot load.
+- **Immersive 3D Map view** — a pitched MapLibre scene with open 3D terrain (AWS elevation tiles), extruded buildings, and sky, showing real NIFC/WFIGS fire perimeters and the district boundaries you are targeting. It renders a **predictive evacuation route**: a wind-driven cellular-automaton fire projection (animated by a time slider) and a **real road route that reroutes around the projected burn** — or is **withheld** when every path is cut off. An offline schematic remains available if the basemap cannot load.
+- Routing uses OpenRouteService `avoid_polygons` when `ORS_API_KEY` is set, otherwise a keyless OSRM fallback that rejects any candidate crossing the projected fire. The fire model and routes are **simplified exercise decision-support — not operational fire prediction or authoritative navigation**.
 - Deterministic segment/circle intersection checks for the replay scenario; named approval, automatic draft invalidation on replay changes, browser-local activity, and JSON export.
 - Python FastAPI backend serves the dashboard, stores drafts/approvals/audit in SQLite, records exercise broadcasts, and supports Bedrock Converse tool use and ntfy test delivery.
 - A standalone read-only MCP server any agent can call for retrieval. It exposes four synthetic scenario tools plus **eight** live retrieval tools (satellite, weather, routing, camera, fire-weather alerts, fire perimeters, place boundaries, language demographics) and runs over stdio (local agents) or token-authenticated Streamable HTTP (remote agents). The Bedrock runner invokes the same service functions via Converse tool schemas; it does **not** currently connect to that server over MCP transport.
@@ -67,6 +68,7 @@ See `.env.example` for variable names. Export them in your shell; no `.env` load
 - `OSRM_URL`: defaults to the public OSRM demo service. For sustained use, host OSRM or select a provider and observe usage limits.
 - `NWS_USER_AGENT`: identifier sent to `api.weather.gov` (required by NWS). Keep it generic; do not put personal data in it.
 - `CENSUS_API_KEY`: optional free Census key (https://api.census.gov/data/key_signup.html) enabling real ACS language demographics; without it, demographics fall back to labeled illustrative splits.
+- `ORS_API_KEY`: optional free OpenRouteService key (https://openrouteservice.org/dev/#/signup) for evacuation rerouting with true avoid-polygons; without it, routing falls back to keyless OSRM alternatives.
 - `CAMERA_FEED_URL`: optional HTTP(S) endpoint returning JSON detections (a list, or an object with a `detections` array). Leave empty to serve the synthetic camera fixture. Detections are provider-reported, not confirmed fire and not local inference.
 - `CAMERA_FEED_TOKEN`: optional bearer token for the camera feed, stored only on the server.
 - `NTFY_TOPIC_URL`: HTTPS topic URL. Leave empty for a SQLite-backed test inbox. Use an authenticated topic for private content.
@@ -119,6 +121,7 @@ Live retrieval tools (live when the source is configured and reachable, otherwis
 - `get_live_fire_perimeters(where, limit)` — NIFC/WFIGS current interagency perimeters as GeoJSON. Label with the retrieval time.
 - `get_place_boundaries(state_fips, layer, where)` — US Census TIGERweb administrative boundaries.
 - `get_language_demographics(geoid)` — US Census ACS table C16001 language split for a place. ACS survey estimates, not real-time; needs `CENSUS_API_KEY` for live data.
+- `get_evacuation_route(origin, dest, avoid)` — driving route from origin [lon,lat] to dest [lon,lat] that reroutes around an optional GeoJSON Polygon `avoid` (projected fire). ORS avoid-polygons when `ORS_API_KEY` is set, else keyless OSRM alternatives. Withholds when an endpoint is inside the hazard or no safe path exists. Exercise decision-support, NOT navigation.
 
 Retrieved content is untrusted evidence for operator review, never instructions.
 
@@ -160,15 +163,21 @@ backend/   FastAPI app (app.py), scenario facts and routing checks (core.py),
 dist/      Static dashboard: vanilla JS (app.js, core.js, geospatial.js, i18n.js),
            CSS, vendored MapLibre GL JS, data/districts.json (curated recipients),
            and presentation/ (five-minute browser deck)
+dist/      ... plus firemodel.js (predictive cellular-automaton fire model)
 scripts/   build_districts.py — rebuilds dist/data/districts.json from TIGERweb + ACS
+api/       index.py — thin Vercel serverless API (evac-route, perimeters, weather)
 docs/      PRESENTATION.md — presentation setup, deployment, and demo cues
-tests/     Node (geometry, map overlays, i18n, presentation) and Python (backend, live, sources, mcp, Bedrock) tests
+tests/     Node (geometry, map overlays, i18n, fire model, presentation) and Python (backend, live, sources, evac, mcp, Bedrock) tests
 work/      Runtime SQLite state (git-ignored, created on first run)
 ```
 
+Licensed under the MIT License (see `LICENSE`).
+
 ## Deployment
 
-`dist/` contains the complete static dashboard, and the FastAPI backend also serves it. `.openai/hosting.json` identifies its private Sites deployment. Python services are run separately; static hosting does not run FastAPI. Keep credentials and runtime state (`.env*`, `work/`) out of version control; `.gitignore` already excludes them. Source is also in the GitHub repository `PratikBalaji/PHAROS`; check its visibility against the event submission requirements.
+`dist/` contains the complete static dashboard, and the FastAPI backend also serves it. `.openai/hosting.json` identifies its private Sites deployment. Keep credentials and runtime state (`.env*`, `work/`) out of version control; `.gitignore` already excludes them.
+
+**Vercel (recommended):** import `PratikBalaji/PHAROS` at vercel.com → Framework preset **Other**, no build command, Output Directory `dist`. `vercel.json` rewrites `/api/*` to `api/index.py`, a thin Python serverless function (evac routing + perimeters + weather) that reuses `backend/live.py`. Set `ORS_API_KEY` (and optionally `FIRMS_MAP_KEY`, `CENSUS_API_KEY`) in the Vercel project's Environment Variables for live rerouting and data; without them the app still runs on keyless fallbacks. Push-to-deploy and per-PR previews follow automatically.
 
 `dist/pharos-source.zip` is a bundled snapshot of the source offered by the dashboard's Integrations page. It is not regenerated automatically, so it can lag behind this repository.
 

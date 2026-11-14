@@ -23,6 +23,7 @@ from .core import tool_result
 from .live import (
     resolve_weather, resolve_firms, resolve_routes, resolve_camera,
     resolve_nws_alerts, resolve_fire_perimeters, resolve_place_boundaries, resolve_language_demographics,
+    resolve_evac_route,
 )
 
 mcp = FastMCP('PHAROS wildfire exercise')
@@ -136,6 +137,18 @@ async def get_language_demographics(geoid: str) -> dict:
     `geoid` is a 7-digit place GEOID (state FIPS + place code). Live when reachable,
     otherwise a labeled synthetic split. These are ACS survey ESTIMATES, not real-time."""
     return await resolve_language_demographics(geoid=geoid)
+
+
+@mcp.tool()
+async def get_evacuation_route(origin: list[float], dest: list[float], avoid: dict = None) -> dict:
+    """Compute an evacuation driving route from origin [lon,lat] to dest [lon,lat].
+
+    `avoid` is an optional GeoJSON Polygon geometry (a projected-fire hazard) the route must
+    stay out of. Uses OpenRouteService avoid-polygons when ORS_API_KEY is set, otherwise OSRM
+    alternatives rejecting any path that crosses the hazard. Returns withheld=True when an
+    endpoint is inside the hazard or no safe route exists. Simplified exercise decision-support,
+    NOT authoritative navigation or an evacuation order."""
+    return await resolve_evac_route(origin, dest, avoid)
 
 
 # --- Transport ---
