@@ -15,7 +15,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from .core import create_draft, tool_result, check_routes
-from .live import LiveDataError, fetch_weather, fetch_firms, fetch_routes, fetch_camera_detections
+from .live import (
+    LiveDataError, fetch_weather, fetch_firms, fetch_routes, fetch_camera_detections,
+    resolve_nws_alerts, resolve_fire_perimeters, resolve_language_demographics,
+)
 
 ROOT=Path(__file__).resolve().parents[1]
 DB_PATH=Path(os.getenv('PHAROS_DB',str(ROOT/'work'/'pharos.sqlite3')))
@@ -103,6 +106,22 @@ async def send(draft_id: str,body: DraftRequest):
     d.update(delivered=True,sending=False,delivery_status=status);save(d);audit(status,draft_id)
     return {'status':status,'duplicate':False}
 
+class Broadcast(BaseModel):
+    reviewer: str=Field(min_length=1,max_length=80)
+    areas: list[str]=Field(min_length=1,max_length=64)
+    geoids: list[str]=Field(default_factory=list,max_length=64)
+    languages: list[str]=Field(min_length=1,max_length=20)
+
+@app.post('/api/broadcast')
+def broadcast(body: Broadcast):
+    # Exercise-only: records a reviewed broadcast per area. No real public alerting
+    # (no IPAWS/WEA), consistent with the whole prototype's posture.
+    if not body.reviewer.strip(): raise HTTPException(400,'Named review is required')
+    with LOCK:
+        for area in body.areas:
+            audit(f'EXERCISE broadcast to {area} in {len(body.languages)} language(s) by {body.reviewer.strip()}')
+    return {'status':'Recorded (exercise)','areas':len(body.areas),'languages':body.languages,'public_alert':False}
+
 @app.get('/api/audit')
 def audit_rows():
     with sqlite3.connect(DB_PATH) as db: rows=db.execute('SELECT time,action,draft_id FROM audit ORDER BY rowid DESC LIMIT 100').fetchall()
@@ -131,5 +150,20 @@ async def routes(start_lon: float=Query(ge=-180,le=180),start_lat: float=Query(g
 async def camera():
     try: return await fetch_camera_detections()
     except LiveDataError as e: raise HTTPException(e.status,str(e))
+
+# These use the live-or-synthetic resolvers so the console always renders something
+# labeled, even when a source is unreachable. None asserts an evacuation order.
+
+@app.get('/api/live/alerts')
+async def alerts(area: str='', point: str='', event: str=''):
+    return await resolve_nws_alerts(area or None, point or None, event or None)
+
+@app.get('/api/live/perimeters')
+async def perimeters(where: str='1=1', limit: int=Query(50,ge=1,le=500)):
+    return await resolve_fire_perimeters(where=where,limit=limit)
+
+@app.get('/api/live/demographics')
+async def demographics(geoid: str=Query(min_length=7,max_length=10)):
+    return await resolve_language_demographics(geoid=geoid)
 
 app.mount('/',StaticFiles(directory=ROOT/'dist',html=True),name='dashboard')
