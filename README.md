@@ -19,16 +19,15 @@ Open `/presentation/` on the dashboard deployment. The six-slide browser deck em
 
 ## Run the full local app
 
-Python 3.11+ recommended. From this directory:
+Install Python 3.11+ and run:
 
 ```sh
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m uvicorn backend.app:app --host 127.0.0.1 --port 8000
+python3 run.py
 ```
 
-Open `http://127.0.0.1:8000`. The dashboard detects its local backend automatically. API docs: `http://127.0.0.1:8000/docs`.
+On Windows use `py run.py`. The launcher creates `.venv`, installs dependencies, loads local `.env` settings and serves the frontend + backend together at **http://127.0.0.1:8000**. Node.js and cloud hosting are not required. Local exercise messages use a test inbox by default; configure Photon in `.env` to activate SMS.
+
+Presentation: `/presentation/` · API docs: `/docs` · Stop: Ctrl+C. Use `--port 8080` for another port or `--reload` for backend development. [Full local setup instructions](docs/LOCAL_SETUP.md).
 
 ## Communications console & real data
 
@@ -66,7 +65,7 @@ Photon Beta SMS is implemented in both backends. See [setup and MCP connection i
 
 ## Data and notifications
 
-See `.env.example` for variable names. Export them in your shell; no `.env` loader is enabled.
+See `.env.example` for variable names. `python3 run.py` creates and loads your local `.env`; existing shell variables take precedence. Direct uvicorn launches require exported variables or `--env-file .env`.
 
 - `FIRMS_MAP_KEY`: free NASA FIRMS API key from https://firms.modaps.eosdis.nasa.gov/api/map_key/ . Thermal observations are not a perimeter.
 - `OSRM_URL`: defaults to the public OSRM demo service. For sustained use, host OSRM or select a provider and observe usage limits.
