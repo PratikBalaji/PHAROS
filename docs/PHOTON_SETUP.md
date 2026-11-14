@@ -42,6 +42,16 @@ An active SMS line and Photon platform authorization are required. Photon also r
 
 The multilingual Console continues to record reviewed bundles. It does **not** text an entire district or every localized version to the configured test conversation. Actual multilingual distribution needs enrolled recipients mapped to districts, language preferences and Photon conversations.
 
+## Console demo: demographics, AI languages, SMS
+
+In the Console, select a district. The **District demographics** panel shows its language split (ACS when `CENSUS_API_KEY` built the dataset, otherwise labeled illustrative).
+
+1. **Choose languages with AI** sends Gemini only the district name and its split. Gemini picks the languages (English always included) and gives a one-sentence rationale. The server keeps only codes that exist in the split and are supported, and adds any supported language at or above 10% of residents even if Gemini left it out.
+2. **Translate** asks Gemini to translate the English exercise sentence. The server adds the fixed exercise marker itself, checks the district name survived, and marks every non-English version native-speaker review pending.
+3. **Send exercise SMS** (reviewer name and confirmation required) texts each version as its own SMS to the one configured `PHOTON_SPACE_ID` conversation. That single test number stands in for the district; enrolling recipients per district is not implemented.
+
+Without `GEMINI_API_KEY`, or if Gemini fails, steps 1 and 2 fall back to the share-based rule and the fixed templates, and the screen says so. With `PHAROS_DELIVERY_PROVIDER=inbox` the send is only recorded. Each language uses its own idempotency key (`pharos-sms-<request>-<language>`); an ambiguous Photon result blocks resending that language, and a definite rejection can be retried. Audit entries record counts and the reviewer, never message bodies or numbers. Endpoints: `POST /api/console/language-plan`, `/api/console/translate`, `/api/console/send-sms`.
+
 ## Failure and duplicate behavior
 
 Each draft uses a stable `idempotency-key`. R2 conditional writes (Worker) or the process lock (Python) prevent concurrent sends of the same draft. Submissions are recorded with the provider message ID. A timeout or ambiguous response blocks automatic resending, and pending drafts cannot be edited. Inspect Photon before creating a replacement draft after an uncertain result. Definite rejection permits retrying the same draft with the same idempotency key after fixing configuration.

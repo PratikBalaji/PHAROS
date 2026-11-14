@@ -20,6 +20,7 @@ import os
 from mcp.server.fastmcp import FastMCP
 
 from .core import tool_result
+from .langplan import resolve_language_plan
 from .live import (
     resolve_weather, resolve_firms, resolve_routes, resolve_camera,
     resolve_nws_alerts, resolve_fire_perimeters, resolve_place_boundaries, resolve_language_demographics,
@@ -137,6 +138,17 @@ async def get_language_demographics(geoid: str) -> dict:
     `geoid` is a 7-digit place GEOID (state FIPS + place code). Live when reachable,
     otherwise a labeled synthetic split. These are ACS survey ESTIMATES, not real-time."""
     return await resolve_language_demographics(geoid=geoid)
+
+
+@mcp.tool()
+async def get_language_plan(geoid: str) -> dict:
+    """Choose which languages to send an exercise alert in for one district.
+
+    Reads the district's committed demographic split (ACS when a Census key built it, otherwise
+    illustrative), asks Gemini to choose languages when GEMINI_API_KEY is set, and otherwise applies
+    a share-based rule. Returns the split, chosen languages, a rationale and the source used.
+    Selection only: nothing is translated or sent."""
+    return await resolve_language_plan(geoid)
 
 
 @mcp.tool()
