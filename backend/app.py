@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from .core import create_draft, tool_result, check_routes
 from .broadcast import build_plan
+from .photon import delivery_config, send_photon, refresh_photon, PhotonError
 from uuid import uuid4
 from .live import (
     LiveDataError, fetch_weather, fetch_firms, fetch_routes, fetch_camera_detections,
@@ -56,7 +57,7 @@ class Approval(DraftRequest):
 
 @app.get('/api/health')
 def health():
-    return {'status':'ok','mode':'synthetic exercise','storage':'ephemeral-instance' if os.getenv('VERCEL') else 'local-sqlite','bedrock_configured':bool(os.getenv('BEDROCK_MODEL_ID')),'ntfy_configured':bool(os.getenv('NTFY_TOPIC_URL')),'firms_configured':bool(os.getenv('FIRMS_MAP_KEY'))}
+    return {'status':'ok','mode':'synthetic exercise','storage':'ephemeral-instance' if os.getenv('VERCEL') else 'local-sqlite','bedrock_configured':bool(os.getenv('BEDROCK_MODEL_ID')),'ntfy_configured':bool(os.getenv('NTFY_TOPIC_URL')),'firms_configured':bool(os.getenv('FIRMS_MAP_KEY')),'delivery':delivery_config()}
 
 @app.get('/api/scenario')
 def scenario(stage: Literal[0,1,2]=0):
@@ -89,11 +90,21 @@ async def send(draft_id: str,body: DraftRequest):
     with LOCK:
         d=get_draft(draft_id);fresh(d,body.stage)
         if not d['approved']: raise HTTPException(409,'Review and approve the draft first')
-        if d.get('delivered'): return {'status':d['delivery_status'],'duplicate':True}
+        if d.get('delivered'): return {'status':d['delivery_status'],'delivery':d.get('delivery'),'duplicate':True}
         if d.get('sending'): raise HTTPException(409,'Delivery is pending or uncertain; inspect provider before retrying')
+        channel=delivery_config()
+        if not channel['configured']: raise HTTPException(503,'Delivery is not configured. Check the Integrations panel for missing server settings.')
         d['sending']=True;save(d)
     topic=os.getenv('NTFY_TOPIC_URL')
-    if topic:
+    if channel['provider']=='photon':
+        try:
+            d['delivery']=await send_photon(d['text'],'pharos-draft-'+d['id'])
+            status=d['delivery']['status']
+        except PhotonError as e:
+            if not e.uncertain: d['sending']=False;save(d)
+            audit('Photon delivery uncertain; automatic resend blocked' if e.uncertain else 'Photon request rejected; no delivery recorded',draft_id)
+            raise HTTPException(502,str(e)) from None
+    elif channel['provider']=='ntfy':
         parsed=urlparse(topic)
         if parsed.scheme!='https' or not parsed.netloc:
             d['sending']=False;save(d);raise HTTPException(503,'Configure an HTTPS ntfy topic URL')
@@ -109,7 +120,16 @@ async def send(draft_id: str,body: DraftRequest):
         status='Accepted by ntfy; device receipt unverified'
     else: status='Recorded in backend test inbox'
     d.update(delivered=True,sending=False,delivery_status=status);save(d);audit(status,draft_id)
-    return {'status':status,'duplicate':False}
+    return {'status':status,'delivery':d.get('delivery'),'duplicate':False}
+
+@app.get('/api/drafts/{draft_id}/delivery')
+async def delivery_receipt(draft_id: str):
+    d=get_draft(draft_id)
+    if d.get('delivery',{}).get('provider')!='photon': raise HTTPException(409,'No Photon receipt exists for this draft')
+    try: d['delivery']=await refresh_photon(d['delivery'])
+    except PhotonError as e: raise HTTPException(502,str(e)) from None
+    d['delivery_status']=d['delivery']['status'];save(d)
+    return {'status':d['delivery_status'],'delivery':d['delivery']}
 
 class Broadcast(BaseModel):
     reviewer: str=Field(min_length=1,max_length=80)

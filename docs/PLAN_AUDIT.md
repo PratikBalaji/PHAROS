@@ -1,5 +1,7 @@
 # PHAROS plan audit — November 14, 2026
 
+**Photon update:** Photon Beta SMS adapters now exist in Worker and Python, with approved-draft submission, idempotency and receipt refresh. Provider/project settings are configured; API key, sender and SMS conversation remain outstanding. No live SMS delivery has been verified. This replaces Twilio as the selected texting platform. See [setup](PHOTON_SETUP.md). The table below records the original audit.
+
 Reviewed after pulling `116e8e7` from GitHub main. **The hackathon exercise workflow is built; the original end-to-end AI detection and emergency dispatch vision is not complete.** This assessment is based on source and runtime configuration, not README claims alone.
 
 | Original goal | Current evidence | Status / remaining work |
