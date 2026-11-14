@@ -1,7 +1,5 @@
 """Single-operator prototype API. Bind to loopback; protect any remote deployment."""
 import asyncio
-import csv
-import io
 import json
 import os
 import sqlite3
@@ -17,6 +15,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from .core import create_draft, tool_result, check_routes
+from .live import (
+    LiveDataError, fetch_weather, fetch_firms, fetch_routes, fetch_camera_detections,
+    resolve_nws_alerts, resolve_fire_perimeters, resolve_language_demographics,
+)
 
 ROOT=Path(__file__).resolve().parents[1]
 DB_PATH=Path(os.getenv('PHAROS_DB',str(ROOT/'work'/'pharos.sqlite3')))
@@ -104,42 +106,64 @@ async def send(draft_id: str,body: DraftRequest):
     d.update(delivered=True,sending=False,delivery_status=status);save(d);audit(status,draft_id)
     return {'status':status,'duplicate':False}
 
+class Broadcast(BaseModel):
+    reviewer: str=Field(min_length=1,max_length=80)
+    areas: list[str]=Field(min_length=1,max_length=64)
+    geoids: list[str]=Field(default_factory=list,max_length=64)
+    languages: list[str]=Field(min_length=1,max_length=20)
+
+@app.post('/api/broadcast')
+def broadcast(body: Broadcast):
+    # Exercise-only: records a reviewed broadcast per area. No real public alerting
+    # (no IPAWS/WEA), consistent with the whole prototype's posture.
+    if not body.reviewer.strip(): raise HTTPException(400,'Named review is required')
+    with LOCK:
+        for area in body.areas:
+            audit(f'EXERCISE broadcast to {area} in {len(body.languages)} language(s) by {body.reviewer.strip()}')
+    return {'status':'Recorded (exercise)','areas':len(body.areas),'languages':body.languages,'public_alert':False}
+
 @app.get('/api/audit')
 def audit_rows():
     with sqlite3.connect(DB_PATH) as db: rows=db.execute('SELECT time,action,draft_id FROM audit ORDER BY rowid DESC LIMIT 100').fetchall()
     return [{'time':r[0],'action':r[1],'draft_id':r[2]} for r in rows]
 
-async def external_json(url,params=None):
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r=await client.get(url,params=params);r.raise_for_status();return r.json()
-    except (httpx.HTTPError,ValueError): raise HTTPException(502,'Upstream data service unavailable; no substitute data returned')
+# Live open-data adapters. These REST routes surface live sources directly and
+# return an error when a configured source is unavailable; the MCP server wraps
+# the same fetchers with a labeled synthetic fallback (see backend/live.py).
 
 @app.get('/api/live/weather')
 async def weather(latitude: float=Query(ge=-90,le=90),longitude: float=Query(ge=-180,le=180)):
-    data=await external_json('https://api.open-meteo.com/v1/forecast',{'latitude':latitude,'longitude':longitude,'current':'wind_speed_10m,wind_direction_10m','timezone':'UTC'})
-    return {'source':'Open-Meteo','retrieved_at':datetime.now(timezone.utc).isoformat(),'data':data,'fire_spread_forecast':None}
+    try: return await fetch_weather(latitude,longitude)
+    except LiveDataError as e: raise HTTPException(e.status,str(e))
 
 @app.get('/api/live/firms')
 async def firms(west: float=Query(ge=-180,le=180),south: float=Query(ge=-90,le=90),east: float=Query(ge=-180,le=180),north: float=Query(ge=-90,le=90)):
-    key=os.getenv('FIRMS_MAP_KEY')
-    if not key: raise HTTPException(503,'FIRMS_MAP_KEY is not configured')
-    if west>=east or south>=north or (east-west)*(north-south)>100: raise HTTPException(400,'Use an ordered local bounding box of at most 100 square degrees')
-    url=f'https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/{west},{south},{east},{north}/1'
-    try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            response=await client.get(url);response.raise_for_status()
-        reader=csv.DictReader(io.StringIO(response.text))
-        if not reader.fieldnames or 'latitude' not in reader.fieldnames: raise ValueError('Invalid feed')
-        rows=list(reader)[:2000]
-    except (httpx.HTTPError,ValueError): raise HTTPException(502,'FIRMS unavailable or key invalid; no substitute observations returned')
-    return {'source':'NASA FIRMS / VIIRS_SNPP_NRT','retrieved_at':datetime.now(timezone.utc).isoformat(),'observations':rows,'is_fire_perimeter':False}
+    try: return await fetch_firms(west,south,east,north)
+    except LiveDataError as e: raise HTTPException(e.status,str(e))
 
 @app.get('/api/live/routes')
 async def routes(start_lon: float=Query(ge=-180,le=180),start_lat: float=Query(ge=-90,le=90),end_lon: float=Query(ge=-180,le=180),end_lat: float=Query(ge=-90,le=90)):
-    base=os.getenv('OSRM_URL','https://router.project-osrm.org').rstrip('/')
-    data=await external_json(f'{base}/route/v1/driving/{start_lon},{start_lat};{end_lon},{end_lat}',{'alternatives':'true','overview':'full','geometries':'geojson'})
-    if data.get('code')!='Ok': raise HTTPException(502,'Routing provider returned no usable routes')
-    return {'source':'OSRM','retrieved_at':datetime.now(timezone.utc).isoformat(),'routes':data.get('routes',[]),'hazard_checked':False,'warning':'Road candidates only. No live hazard or closure validation has been performed.'}
+    try: return await fetch_routes(start_lon,start_lat,end_lon,end_lat)
+    except LiveDataError as e: raise HTTPException(e.status,str(e))
+
+@app.get('/api/live/camera')
+async def camera():
+    try: return await fetch_camera_detections()
+    except LiveDataError as e: raise HTTPException(e.status,str(e))
+
+# These use the live-or-synthetic resolvers so the console always renders something
+# labeled, even when a source is unreachable. None asserts an evacuation order.
+
+@app.get('/api/live/alerts')
+async def alerts(area: str='', point: str='', event: str=''):
+    return await resolve_nws_alerts(area or None, point or None, event or None)
+
+@app.get('/api/live/perimeters')
+async def perimeters(where: str='1=1', limit: int=Query(50,ge=1,le=500)):
+    return await resolve_fire_perimeters(where=where,limit=limit)
+
+@app.get('/api/live/demographics')
+async def demographics(geoid: str=Query(min_length=7,max_length=10)):
+    return await resolve_language_demographics(geoid=geoid)
 
 app.mount('/',StaticFiles(directory=ROOT/'dist',html=True),name='dashboard')
