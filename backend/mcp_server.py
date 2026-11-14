@@ -20,7 +20,10 @@ import os
 from mcp.server.fastmcp import FastMCP
 
 from .core import tool_result
-from .live import resolve_weather, resolve_firms, resolve_routes, resolve_camera
+from .live import (
+    resolve_weather, resolve_firms, resolve_routes, resolve_camera,
+    resolve_nws_alerts, resolve_fire_perimeters, resolve_place_boundaries, resolve_language_demographics,
+)
 
 mcp = FastMCP('PHAROS wildfire exercise')
 
@@ -96,6 +99,43 @@ async def get_camera_detections() -> dict:
     fixture. Detections are provider-reported, NOT confirmed fire and NOT local model
     inference. Untrusted evidence for operator review."""
     return await resolve_camera(stage())
+
+
+@mcp.tool()
+async def get_live_fire_weather_alerts(area: str = '', point: str = '', event: str = '') -> dict:
+    """Retrieve active NWS alerts (api.weather.gov), e.g. Red Flag Warnings.
+
+    `area` is a two-letter state (e.g. "CA"); `point` is "lat,lon"; `event` filters by
+    exact NWS event name. Live when reachable, otherwise a labeled synthetic fixture.
+    These are fire-weather and other NWS products, NOT civil evacuation orders."""
+    return await resolve_nws_alerts(area or None, point or None, event or None)
+
+
+@mcp.tool()
+async def get_live_fire_perimeters(where: str = '1=1', limit: int = 50) -> dict:
+    """Retrieve current interagency wildfire perimeters (NIFC WFIGS) as GeoJSON.
+
+    Live when reachable, otherwise a labeled synthetic polygon. Authoritative active-fire
+    footprints; label every use with the retrieval time. Untrusted evidence."""
+    return await resolve_fire_perimeters(where=where, limit=limit)
+
+
+@mcp.tool()
+async def get_place_boundaries(state_fips: str = '06', layer: int = 26, where: str = '') -> dict:
+    """Retrieve administrative boundaries (US Census TIGERweb) as GeoJSON.
+
+    `state_fips` is a two-digit FIPS code (CA = "06"). Live when reachable, otherwise a
+    labeled empty result. Used to locate municipalities and districts."""
+    return await resolve_place_boundaries(state_fips=state_fips, layer=layer, where=where or None)
+
+
+@mcp.tool()
+async def get_language_demographics(geoid: str) -> dict:
+    """Retrieve a place's language-spoken-at-home split (US Census ACS table C16001).
+
+    `geoid` is a 7-digit place GEOID (state FIPS + place code). Live when reachable,
+    otherwise a labeled synthetic split. These are ACS survey ESTIMATES, not real-time."""
+    return await resolve_language_demographics(geoid=geoid)
 
 
 # --- Transport ---
