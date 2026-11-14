@@ -1,3 +1,4 @@
+import {deliveryConfig,sendPhoton,refreshPhoton} from './photon.js';
 import {buildLanguagePlan} from '../dist/i18n.js';
 import districts from '../dist/data/districts.json' with {type:'json'};
 import {routeAround} from './routing.js';
@@ -8,19 +9,31 @@ async function body(request){try{return await request.json()}catch{fail(400,'Val
 function stage(b){if(![0,1,2].includes(b.stage))fail(422,'Stage must be 0, 1 or 2');return b.stage}
 function fresh(d,b){if(d.stage!==stage(b))fail(409,'Scenario changed; prepare a new draft');if(Date.now()-Date.parse(d.created_at)>900000)fail(409,'Draft expired; prepare a new draft')}
 async function read(bucket,id){const object=await bucket.get('drafts/'+id);if(!object)fail(404,'Draft not found');return {draft:await object.json(),etag:object.etag}}
-async function write(bucket,d,etag){const result=await bucket.put('drafts/'+d.id,JSON.stringify(d),etag?{onlyIf:{etagMatches:etag}}:{});if(!result)fail(409,'Draft changed; reload before continuing')}
+async function write(bucket,d,etag){const result=await bucket.put('drafts/'+d.id,JSON.stringify(d),etag?{onlyIf:{etagMatches:etag}}:{});if(!result)fail(409,'Draft changed; reload before continuing');return result.etag}
 async function audit(bucket,message,id=''){const row={time:new Date().toISOString(),action:message,draft_id:id};await bucket.put(`audit/${String(9999999999999-Date.now()).padStart(13,'0')}-${crypto.randomUUID()}`,JSON.stringify(row));}
 async function upstream(url){const response=await fetch(url,{headers:{'user-agent':'PHAROS hackathon exercise'},signal:AbortSignal.timeout(12000)});if(!response.ok)fail(502,'Upstream data source unavailable');return response.json()}
 export async function handleAPI(request,env){const url=new URL(request.url),path=url.pathname,bucket=env.BUCKET;
- if(path==='/api/health')return json({status:bucket?'ok':'error',mode:'hosted exercise backend',runtime:'cloudflare-worker',storage:'durable-r2',bedrock_configured:false,ntfy_configured:false,firms_configured:false},bucket?200:503);
+ if(path==='/api/health')return json({status:bucket?'ok':'error',mode:'hosted exercise backend',runtime:'cloudflare-worker',storage:'durable-r2',bedrock_configured:false,ntfy_configured:false,firms_configured:false,delivery:deliveryConfig(env)},bucket?200:503);
  if(!bucket)fail(503,'Backend storage is not configured');
  if(path==='/api/scenario')return json({evidence:{mode:'synthetic exercise',sources:SOURCES},routes:checkRoutes(Number(url.searchParams.get('stage')||0))});
  if(path==='/api/drafts'&&request.method==='POST'){const b=await body(request);const d=createDraft(stage(b));d.engine='Hosted server template';await write(bucket,d);await audit(bucket,'Server prepared exercise draft',d.id);return json(d)}
  const match=path.match(/^\/api\/drafts\/([\w-]+)\/(approve|send)$/);
  if(match&&request.method==='POST'){const b=await body(request);const {draft:d,etag}=await read(bucket,match[1]);fresh(d,b);
-  if(match[2]==='approve'){if(d.delivered)fail(409,'Already delivered; create a new draft');if(!b.reviewed||typeof b.reviewer!=='string'||!b.reviewer.trim()||b.reviewer.length>80)fail(400,'Named review is required');if(typeof b.text!=='string'||!b.text.startsWith('EXERCISE ONLY')||b.text.length>4000)fail(400,'Keep the exercise prefix and message under 4000 characters');Object.assign(d,{text:b.text,reviewer:b.reviewer.trim(),approved:true,approved_at:new Date().toISOString()});await write(bucket,d,etag);await audit(bucket,'Approved by '+d.reviewer,d.id);return json({approved:true})}
-  if(!d.approved)fail(409,'Review and approve the draft first');if(d.delivered)return json({status:d.delivery_status,duplicate:true});Object.assign(d,{delivered:true,delivery_status:'Recorded in hosted test inbox',delivered_at:new Date().toISOString()});await write(bucket,d,etag);await audit(bucket,d.delivery_status,d.id);return json({status:d.delivery_status,duplicate:false});
+  if(match[2]==='approve'){if(d.delivered||d.sending)fail(409,'Already submitted or sending; create a new draft');if(!b.reviewed||typeof b.reviewer!=='string'||!b.reviewer.trim()||b.reviewer.length>80)fail(400,'Named review is required');if(typeof b.text!=='string'||!b.text.startsWith('EXERCISE ONLY')||b.text.length>4000)fail(400,'Keep the exercise prefix and message under 4000 characters');Object.assign(d,{text:b.text,reviewer:b.reviewer.trim(),approved:true,approved_at:new Date().toISOString()});await write(bucket,d,etag);await audit(bucket,'Approved by '+d.reviewer,d.id);return json({approved:true})}
+  if(!d.approved)fail(409,'Review and approve the draft first');
+  if(d.delivered)return json({status:d.delivery_status,delivery:d.delivery,duplicate:true});
+  if(d.sending)fail(409,'Delivery pending or uncertain; check Photon before retrying');
+  const channel=deliveryConfig(env);if(!channel.configured)fail(503,'Delivery is not configured. Check the Integrations panel for missing server settings.');
+  let nextTag=etag;
+  if(channel.provider==='photon'){
+   d.sending=true;nextTag=await write(bucket,d,etag);
+   try{d.delivery=await sendPhoton(env,d.text,'pharos-draft-'+d.id);d.delivery_status=d.delivery.status;}
+   catch(e){if(!e.uncertain){d.sending=false;await write(bucket,d,nextTag)}await audit(bucket,e.uncertain?'Photon delivery uncertain; automatic resend blocked':'Photon request rejected; no delivery recorded',d.id);fail(502,e.detail||'Photon request failed; inspect provider before retrying')}
+  }else d.delivery_status='Recorded in hosted test inbox';
+  Object.assign(d,{delivered:true,sending:false,delivered_at:new Date().toISOString()});await write(bucket,d,nextTag);await audit(bucket,d.delivery_status,d.id);return json({status:d.delivery_status,delivery:d.delivery,duplicate:false});
  }
+ const receiptMatch=path.match(/^\/api\/drafts\/([\w-]+)\/delivery$/);
+ if(receiptMatch&&request.method==='GET'){const {draft:d,etag}=await read(bucket,receiptMatch[1]);if(d.delivery?.provider!=='photon')fail(409,'No Photon receipt exists for this draft');d.delivery=await refreshPhoton(env,d.delivery);d.delivery_status=d.delivery.status;await write(bucket,d,etag);return json({status:d.delivery_status,delivery:d.delivery})}
  if(path==='/api/broadcast'&&request.method==='POST'){const b=await body(request);if(typeof b.reviewer!=='string'||!b.reviewer.trim()||b.reviewer.length>80||b.reviewed!==true||!Array.isArray(b.geoids)||!b.geoids.length||b.geoids.length>64||!b.geoids.every(g=>typeof g==='string')||!['auto','all'].includes(b.mode))fail(422,'Named review, known districts and a language strategy are required');const ids=[...new Set(b.geoids)];const selected=ids.map(id=>districts.features.find(f=>f.properties.GEOID===id));if(selected.some(f=>!f))fail(422,'Unknown recipient district');const plan=buildLanguagePlan(selected,b.mode);const record={id:crypto.randomUUID(),created_at:new Date().toISOString(),reviewer:b.reviewer.trim(),plan,public_alert:false,status:'Recorded in hosted exercise log'};await bucket.put('broadcasts/'+record.id,JSON.stringify(record));await audit(bucket,`EXERCISE bundle ${record.id}: ${plan.message_count} localized messages across ${plan.areas.length} areas reviewed by ${record.reviewer}`);return json(record)}
  const broadcastMatch=path.match(/^\/api\/broadcasts\/([\w-]+)$/);if(broadcastMatch&&request.method==='GET'){const record=await bucket.get('broadcasts/'+broadcastMatch[1]);if(!record)fail(404,'Bundle not found');return json(await record.json())}
  if(path==='/api/audit'){const list=await bucket.list({prefix:'audit/',limit:100});return json(await Promise.all(list.objects.map(async o=>(await bucket.get(o.key)).json())))}

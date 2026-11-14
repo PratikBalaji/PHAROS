@@ -9,7 +9,7 @@ An MCP server that reviews wildfire evidence, selects real municipalities and di
 - **Immersive 3D Map view** — a pitched MapLibre scene with open 3D terrain (AWS elevation tiles), extruded buildings, and sky, showing real NIFC/WFIGS fire perimeters and the district boundaries you are targeting. It renders a **predictive evacuation route**: a wind-driven cellular-automaton fire projection (animated by a time slider) and a **real road route that reroutes around the projected burn** — or is **withheld** when every path is cut off. An offline schematic remains available if the basemap cannot load.
 - Routing uses OpenRouteService `avoid_polygons` when `ORS_API_KEY` is set, otherwise a keyless OSRM fallback that rejects any candidate crossing the projected fire. The fire model and routes are **simplified exercise decision-support — not operational fire prediction or authoritative navigation**.
 - Deterministic segment/circle intersection checks for the replay scenario; named approval, automatic draft invalidation on replay changes, browser-local activity, and JSON export.
-- Python FastAPI backend serves the dashboard, stores drafts/approvals/audit in SQLite, records exercise broadcasts, and supports Bedrock Converse tool use and ntfy test delivery.
+- Python FastAPI backend serves the dashboard, stores drafts/approvals/audit in SQLite, records exercise broadcasts, and supports Bedrock Converse tool use, Photon SMS and optional ntfy delivery.
 - A standalone read-only MCP server any agent can call for retrieval. It exposes four synthetic scenario tools plus **eight** live retrieval tools (satellite, weather, routing, camera, fire-weather alerts, fire perimeters, place boundaries, language demographics) and runs over stdio (local agents) or token-authenticated Streamable HTTP (remote agents). The Bedrock runner invokes the same service functions via Converse tool schemas; it does **not** currently connect to that server over MCP transport.
 - Open-data adapters (some require keys) — NASA FIRMS (satellite), Open-Meteo (weather), OSRM (routing), NWS `api.weather.gov` (fire-weather alerts), NIFC/WFIGS (fire perimeters), US Census TIGERweb (boundaries) — plus US Census ACS (language demographics, free key) and an AI-camera detection ingest adapter. Reachable as REST endpoints (see `/docs`) and through the MCP tools. When a source is unconfigured or unreachable, the tools return a clearly labeled synthetic fallback rather than fabricated live data.
 
@@ -60,6 +60,10 @@ Restart the backend after setting configuration. The model must support the Bedr
 
 The model is asked to retrieve all four tools and return an incident brief with source IDs. The server validates the schema, source allowlist, and tool retrieval. This does not prove semantic factuality; the brief remains reviewable. Routing decisions and the default message are deterministic. Bedrock errors are surfaced rather than presented as successful AI output. Without `BEDROCK_MODEL_ID`, the server labels output “Server template.”
 
+## Photon SMS
+
+Photon Beta SMS is implemented in both backends. See [setup and MCP connection instructions](docs/PHOTON_SETUP.md). Set `PHAROS_DELIVERY_PROVIDER=photon` and the project API key, project ID, sender User ID and SMS Space ID. The UI shows missing setup, sends only approved exercise drafts, and can refresh a provider delivery receipt. Multilingual bundles remain recorded exercises until recipient-to-language mapping is implemented.
+
 ## Data and notifications
 
 See `.env.example` for variable names. Export them in your shell; no `.env` loader is enabled.
@@ -71,7 +75,7 @@ See `.env.example` for variable names. Export them in your shell; no `.env` load
 - `ORS_API_KEY`: optional free OpenRouteService key (https://openrouteservice.org/dev/#/signup) for evacuation rerouting with true avoid-polygons; without it, routing falls back to keyless OSRM alternatives.
 - `CAMERA_FEED_URL`: optional HTTP(S) endpoint returning JSON detections (a list, or an object with a `detections` array). Leave empty to serve the synthetic camera fixture. Detections are provider-reported, not confirmed fire and not local inference.
 - `CAMERA_FEED_TOKEN`: optional bearer token for the camera feed, stored only on the server.
-- `NTFY_TOPIC_URL`: HTTPS topic URL. Leave empty for a SQLite-backed test inbox. Use an authenticated topic for private content.
+- `NTFY_TOPIC_URL`: HTTPS topic URL. Used only when ntfy is selected; choose `PHAROS_DELIVERY_PROVIDER=inbox` for storage-only testing. Use an authenticated topic for private content.
 - `NTFY_TOKEN`: optional bearer token stored only on the server.
 - `PHAROS_ALLOWED_ORIGINS`: comma-separated allowed frontend origins. CORS is not authentication.
 - `PHAROS_DB`: optional SQLite path. Local default: `work/pharos.sqlite3`. On Vercel the default is `/tmp/pharos/pharos.sqlite3`, which is ephemeral and instance-local. It cannot provide durable/shared draft or audit storage; a managed database is needed for reliable multi-instance workflows.
@@ -193,7 +197,7 @@ The source configuration has been schema-checked and both ASGI entry points test
 
 The private Sites deployment now serves both the frontend and a JavaScript Worker backend. The Worker uses a provisioned R2 bucket for durable exercise drafts, named approvals, test-inbox records and audit events. `/api/health` reports `runtime: cloudflare-worker` and `storage: durable-r2`. These records survive Worker instance restarts. Publication does not change the private audience.
 
-The hosted Worker supports the exercise draft/approve/send flow, exercise broadcasts, audit retrieval, weather, NWS alerts, NIFC perimeters, and OSRM alternatives checked against supplied hazard polygons. Delivery records a test inbox entry; it does not send SMS, ntfy, or official alerts. Bedrock inference and the Python MCP server remain in the FastAPI implementation and are **not running in the Worker**. The runtime reports these capabilities honestly. The original FastAPI/Vercel configuration remains available, but Vercel deployment access is not connected to this workspace.
+The hosted Worker supports the exercise draft/approve/send flow, exercise broadcasts, audit retrieval, weather, NWS alerts, NIFC perimeters, and OSRM alternatives checked against supplied hazard polygons. Delivery supports Photon Beta SMS for approved drafts when configured, or an explicitly selected test inbox. It does not send ntfy or official emergency alerts from the Worker. Bedrock inference and the Python MCP server remain in the FastAPI implementation and are **not running in the Worker**. The runtime reports these capabilities honestly. The original FastAPI/Vercel configuration remains available, but Vercel deployment access is not connected to this workspace.
 
 Build the hosted runtime with `npm ci && npm run build:sites`. `worker/assets.js` and `dist/server/` are generated and ignored. The build embeds the dashboard assets so the Worker handles static routes and API routes on the same origin. Never place secrets in generated assets.
 

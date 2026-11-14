@@ -14,6 +14,7 @@ Do not put secrets in source, `dist/`, `vercel.json`, browser settings, or a Git
 | NIFC/WFIGS | Public ArcGIS query endpoint | No key | Python and Worker; live perimeters are not projected scenario geometry. |
 | Census TIGERweb | Public ArcGIS boundaries endpoint | No key | Python/MCP + dataset-building script. Runtime Worker serves the committed dataset. |
 | External AI camera feed | `CAMERA_FEED_URL`; optional `CAMERA_FEED_TOKEN` | Depends on chosen feed | `backend/live.py: fetch_camera_detections`; Python/MCP only. Need a JSON detection provider, not just an arbitrary camera stream URL. No local YOLO inference. |
+| Photon Beta SMS | `PHOTON_API_KEY`, `PHOTON_PROJECT_ID`, `PHOTON_SENDER_ID`, `PHOTON_SPACE_ID`; `PHAROS_DELIVERY_PROVIDER=photon` | Project-scoped key + existing SMS sender/conversation | Implemented in Worker and Python; key/sender/space still needed. [Setup](PHOTON_SETUP.md). MCP OAuth is separate from app runtime credentials. |
 | ntfy | `NTFY_TOPIC_URL`, optional/required-by-topic `NTFY_TOKEN` | URL required; token depends on topic permissions | `backend/app.py: send`; Python only. Current Worker stores a test receipt, not phone push. HTTP acceptance is not device receipt. |
 | Remote MCP | `PHAROS_MCP_TOKEN`, plus transport/host/port | Generate a new strong app token; no vendor key | `backend/mcp_server.py`; mandatory for HTTP mode, not stdio. Requires separate hosted process and HTTPS. |
 | MapLibre + CARTO basemap | Vendored MapLibre, public CARTO style | No Mapbox token needed | Frontend. External asset availability/terms still apply. |
@@ -34,4 +35,4 @@ Do not put secrets in source, `dist/`, `vercel.json`, browser settings, or a Git
 3. FIRMS MAP_KEY and optionally ORS_API_KEY, after choosing which runtime will consume them.
 4. Chosen notification channel and its protected destination; camera provider and feed format if available.
 
-As of this audit the current Site's runtime environment-variable list was empty. Do not assume that your personal Bedrock account access has already been configured on the app.
+At the initial audit the Site environment was empty. Photon setup subsequently configured the provider and project ID; the API key, sender and conversation are still outstanding. Do not assume that your personal Bedrock account access has already been configured on the app.

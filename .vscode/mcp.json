@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "photon": {
+      "type": "http",
+      "url": "https://mcp.photon.codes/mcp"
+    }
+  }
+}

@@ -2,6 +2,8 @@
 
 | Path | Responsibility |
 | --- | --- |
+| `worker/photon.js`, `backend/photon.py` | Photon Beta SMS configuration, approved text submission and receipt lookup |
+| `docs/PHOTON_SETUP.md`, `.vscode/mcp.json` | Hosting setup and OAuth MCP client connection |
 | `dist/app.js` | Console, replay, drafts, review actions, API requests, persisted browser UI state |
 | `dist/i18n.js` | Language ranking, per-district bundle planning, coverage-gap reporting |
 | `dist/data/alert-templates.json` | Shared canonical language metadata and fixed exercise templates, read by JS and Python |
@@ -34,3 +36,5 @@
 **Bundle request:** `{geoids: [...], mode: "auto" | "all", reviewer: "...", reviewed: true}`. Both servers reconstruct localized messages from known recipient IDs and canonical templates; preview-language selection is never a sending parameter. Responses include the stored plan and record ID. Unknown recipients or missing review are rejected. No real notification is sent by the bundle endpoint.
 
 See [plan audit](PLAN_AUDIT.md) and [credential inventory](API_KEYS.md) for readiness and deployment differences.
+
+`GET /api/drafts/{id}/delivery` refreshes an existing Photon receipt. Both health endpoints expose delivery readiness without secrets.

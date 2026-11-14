@@ -2,6 +2,30 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {handleAPI} from '../worker/api.js';import {routeAround,intersectsPolygon} from '../worker/routing.js';
 class Bucket{objects=new Map();version=0;async get(key){const obj=this.objects.get(key);return obj?{etag:obj.etag,json:async()=>JSON.parse(obj.text)}:null}async put(key,text,options={}){if(options.onlyIf?.etagMatches&&this.objects.get(key)?.etag!==options.onlyIf.etagMatches)return null;this.objects.set(key,{text,etag:String(++this.version)});return {etag:String(this.version)}}async list({prefix}){return {objects:[...this.objects.keys()].filter(k=>k.startsWith(prefix)).sort().map(key=>({key}))}}}
 const api=(path,data,env)=>handleAPI(new Request('https://example.com'+path,{method:data?'POST':'GET',...(data?{body:JSON.stringify(data),headers:{'Content-Type':'application/json'}}:{})}),env);
+const photonEnv=()=>{const suffix='0'.repeat(25)+'1';return {BUCKET:new Bucket(),PHAROS_DELIVERY_PROVIDER:'photon',PHOTON_API_KEY:'test-only',PHOTON_PROJECT_ID:'pho_prj_'+suffix,PHOTON_SENDER_ID:'pho_usr_'+suffix,PHOTON_SPACE_ID:'pho_spc_'+suffix}};
+async function approved(env){const d=await (await api('/api/drafts',{stage:0},env)).json();await api(`/api/drafts/${d.id}/approve`,{stage:0,reviewed:true,reviewer:'QA',text:d.text},env);return d;}
+test('Photon submission persists receipt, prevents concurrent sends and refreshes delivery',async t=>{
+ const env=photonEnv(),d=await approved(env),previous=globalThis.fetch;let posts=0,release,started;
+ const posted=new Promise(resolve=>started=resolve);const pending=new Promise(resolve=>release=resolve);
+ t.after(()=>{globalThis.fetch=previous});
+ const message={id:'pho_msg_'+'0'.repeat(25)+'1',status:'dispatched'};
+ globalThis.fetch=async(url,opts)=>{if(opts.method==='POST'){posts++;started();await pending;return Response.json(message)}return Response.json(url.includes('/spaces/')?{platform:'sms'}:{...message,status:'delivered'})};
+ const sending=api(`/api/drafts/${d.id}/send`,{stage:0},env);await posted;
+ await assert.rejects(()=>api(`/api/drafts/${d.id}/send`,{stage:0},env),e=>e.status===409);
+ await assert.rejects(()=>api(`/api/drafts/${d.id}/approve`,{stage:0,reviewed:true,reviewer:'QA',text:d.text},env),e=>e.status===409);
+ release();const result=await (await sending).json();assert.equal(result.delivery.message_id,message.id);
+ assert.equal((await (await api(`/api/drafts/${d.id}/send`,{stage:0},env)).json()).duplicate,true);assert.equal(posts,1);
+ assert.equal((await (await api(`/api/drafts/${d.id}/delivery`,null,env)).json()).delivery.provider_status,'delivered');
+});
+test('Photon ambiguous timeout blocks resend; missing settings do not record success',async t=>{
+ const env=photonEnv(),d=await approved(env),previous=globalThis.fetch;t.after(()=>{globalThis.fetch=previous});
+ globalThis.fetch=async(url,opts)=>{if(opts.method==='POST')throw Error('timeout');return Response.json({platform:'sms'})};
+ await assert.rejects(()=>api(`/api/drafts/${d.id}/send`,{stage:0},env),e=>e.status===502);
+ await assert.rejects(()=>api(`/api/drafts/${d.id}/send`,{stage:0},env),e=>e.status===409);
+ const other=photonEnv();delete other.PHOTON_API_KEY;const clean=await approved(other);
+ await assert.rejects(()=>api(`/api/drafts/${clean.id}/send`,{stage:0},other),e=>e.status===503);
+ const stored=await (await other.BUCKET.get('drafts/'+clean.id)).json();assert.ok(!stored.delivered&&!stored.sending);
+});
 test('hosted backend stores drafts, requires review, records idempotent test delivery',async()=>{const env={BUCKET:new Bucket()};const d=await (await api('/api/drafts',{stage:0},env)).json();assert.equal(d.engine,'Hosted server template');await assert.rejects(()=>api(`/api/drafts/${d.id}/send`,{stage:0},env),e=>e.status===409);await api(`/api/drafts/${d.id}/approve`,{stage:0,reviewed:true,reviewer:'QA',text:d.text},env);assert.equal((await (await api(`/api/drafts/${d.id}/send`,{stage:0},env)).json()).duplicate,false);assert.equal((await (await api(`/api/drafts/${d.id}/send`,{stage:0},env)).json()).duplicate,true);assert.equal((await (await api('/api/audit',null,env)).json()).length,3)});
 test('closure draft has no route and changed-stage approval fails',async()=>{const env={BUCKET:new Bucket()};const d=await (await api('/api/drafts',{stage:2},env)).json();assert.equal(d.route_id,null);await assert.rejects(()=>api(`/api/drafts/${d.id}/approve`,{stage:0},env),e=>e.status===409)});
 test('live route rejects polygon crossings and selects an alternative',async()=>{const ring=[[0,0],[2,0],[2,2],[0,2],[0,0]];assert.equal(intersectsPolygon([[-1,1],[3,1]],ring),true);const r=await routeAround({origin:[-1,-1],dest:[3,3],avoid:{type:'Polygon',coordinates:[ring]}},async()=>({code:'Ok',routes:[{geometry:{type:'LineString',coordinates:[[-1,-1],[3,3]]}},{geometry:{type:'LineString',coordinates:[[-1,-1],[-1,3],[3,3]]}}]}));assert.equal(r.rerouted,true);assert.equal(r.withheld,false)});
