@@ -16,6 +16,10 @@ class WorkflowTests(unittest.TestCase):
     def approve(self,d,**changes):
         payload={'stage':d['stage'],'reviewer':'Test operator','reviewed':True,'text':d['text']};payload.update(changes)
         return client.post('/api/drafts/'+d['id']+'/approve',json=payload)
+    def test_scenario_query_accepts_stage_1_and_rejects_3(self):
+        c=TestClient(app)
+        self.assertEqual(c.get('/api/scenario?stage=1').status_code,200)
+        self.assertEqual(c.get('/api/scenario?stage=3').status_code,422)
     def test_scenario_checks(self):
         self.assertEqual([r['blocked'] for r in check_routes(0)],[True,False])
         self.assertTrue(all(r['blocked'] for r in check_routes(2)))
