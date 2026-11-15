@@ -30,9 +30,11 @@ class ConfigTests(unittest.TestCase):
     def test_config(self):
         with patch.dict(os.environ, {'PHAROS_DELIVERY_PROVIDER': 'ntfy'}, clear=True):
             self.assertEqual(delivery_config()['missing'], ['NTFY_TOPIC_URL'])
-        for bad in ('http://ntfy.sh/x', 'https://ntfy.sh/', 'https://ntfy.sh/a/b', 'https://u:p@ntfy.sh/x', 'https://ntfy.sh/x?auth=1', 'nope'):
+        for bad in ('http://ntfy.sh/x', 'https://ntfy.sh/', 'https://ntfy.sh', 'curl -d Hi https://ntfy.sh/x', 'https://ntfy.sh/a/b', 'https://u:p@ntfy.sh/x', 'https://ntfy.sh/x?auth=1', 'nope'):
             with patch.dict(os.environ, {**ENV, 'NTFY_TOPIC_URL': bad}, clear=True):
                 self.assertEqual(delivery_config()['invalid'], ['NTFY_TOPIC_URL'], bad)
+        with patch.dict(os.environ, {**ENV, 'NTFY_TOPIC_URL': TOPIC + '/'}, clear=True):
+            self.assertTrue(delivery_config()['configured'])  # one trailing slash is tolerated
         with patch.dict(os.environ, ENV, clear=True):
             c = delivery_config()
         self.assertEqual((c['provider'], c['channel'], c['configured']), ('ntfy', 'notification', True))

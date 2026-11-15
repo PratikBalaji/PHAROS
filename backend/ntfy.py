@@ -15,7 +15,7 @@ class NtfyError(PhotonError):
 
 
 def _topic_ok(url):
-    p = urlparse((url or '').strip())
+    p = urlparse((url or '').strip().rstrip('/'))
     return p.scheme == 'https' and bool(p.netloc) and bool(re.fullmatch(r'/[A-Za-z0-9_-]{1,64}', p.path)) and not p.query and not p.params and not p.username
 
 
@@ -44,7 +44,7 @@ async def send_ntfy(text, key):
     headers = {'Title': _title(key), 'Tags': 'test_tube', 'Priority': '3', 'Content-Type': 'text/plain; charset=utf-8'}
     try:
         async with _client() as c:
-            r = await c.post(os.environ['NTFY_TOPIC_URL'].strip(), content=text.encode('utf-8'), headers=headers)
+            r = await c.post(os.environ['NTFY_TOPIC_URL'].strip().rstrip('/'), content=text.encode('utf-8'), headers=headers)
     except httpx.HTTPError as e:
         raise NtfyError(f'ntfy request failed ({type(e).__name__}). Check the topic before retrying.', not isinstance(e, (httpx.ConnectError, httpx.ConnectTimeout))) from None
     if not r.is_success:
