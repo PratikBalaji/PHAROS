@@ -40,8 +40,11 @@ async def send_imessage(text, key):
     try:
         async with _client() as c:
             r = await c.post(_url(), json={'to': os.environ['PHOTON_IMESSAGE_TO'].strip(), 'message': text})
-    except httpx.HTTPError:
-        raise PhotonImessageError('Photon request failed. Check the provider before retrying.', True) from None
+    except httpx.HTTPError as e:
+        kind = type(e).__name__  # e.g. ConnectError, ConnectTimeout, ReadTimeout: safe to show, no secrets
+        # Only a read timeout or dropped response may mean the message went out; a failed connect never did.
+        sent_maybe = isinstance(e, (httpx.ReadTimeout, httpx.ReadError, httpx.RemoteProtocolError, httpx.WriteTimeout))
+        raise PhotonImessageError(f'Photon request failed ({kind}). Check the provider before retrying.', sent_maybe) from None
     if not r.is_success:
         code = ''
         try:
