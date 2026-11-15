@@ -21,6 +21,7 @@ from .photon import delivery_config, send_photon, refresh_photon, PhotonError
 from .twilio_wa import send_twilio, refresh_twilio
 from .resend_email import send_resend, refresh_resend
 from .photon_imessage import send_imessage
+from .ntfy import send_ntfy
 from uuid import uuid4
 from .live import (
     LiveDataError, fetch_weather, fetch_firms, fetch_routes, fetch_camera_detections,
@@ -193,10 +194,10 @@ def sms_result(code,row):
     state=row[0]
     return {'code':code,'state':state,'status':'Delivery status uncertain; inspect Photon before retrying' if state=='sending' else row[1],'message_id':receipt.get('message_id'),'provider_status':receipt.get('provider_status')}
 
-PACING={'twilio_whatsapp':3.2,'twilio_sms':3.2,'resend_email':0.6,'photon_imessage':1.0}  # seconds between sends
+PACING={'twilio_whatsapp':3.2,'twilio_sms':3.2,'resend_email':0.6,'photon_imessage':1.0,'ntfy':0.3}  # seconds between sends
 def sender_for(provider):
     # looked up at call time so tests and hot-swaps see the current function
-    return {'photon':send_photon,'twilio_whatsapp':send_twilio,'twilio_sms':send_twilio,'resend_email':send_resend,'photon_imessage':send_imessage}.get(provider)
+    return {'photon':send_photon,'twilio_whatsapp':send_twilio,'twilio_sms':send_twilio,'resend_email':send_resend,'photon_imessage':send_imessage,'ntfy':send_ntfy}.get(provider)
 
 async def deliver_texts(request_id,texts,channel):
     # One idempotent send per (request_id, key). A key is a language code, or 'strategy'.
@@ -237,7 +238,7 @@ async def console_send_sms(body: ConsoleSms):
             raise HTTPException(400,'Each message must keep its exercise marker and name the district')
     channel=delivery_config()
     if not channel['configured']: raise HTTPException(503,'Delivery is not configured. Check the Integrations panel for missing server settings.')
-    if channel['provider'] not in ('photon','photon_imessage','twilio_whatsapp','twilio_sms','resend_email','inbox'): raise HTTPException(409,'Console messages require the photon, photon_imessage, twilio_whatsapp, twilio_sms, resend_email or inbox delivery provider')
+    if channel['provider'] not in ('photon','photon_imessage','twilio_whatsapp','twilio_sms','resend_email','ntfy','inbox'): raise HTTPException(409,'Console messages require the photon, photon_imessage, twilio_whatsapp, twilio_sms, resend_email, ntfy or inbox delivery provider')
     results=await deliver_texts(body.request_id,body.texts,channel)
     counts={k:sum(1 for r in results if r['state']==k) for k in ('submitted','recorded','uncertain','rejected','sending')}
     audit(f"EXERCISE SMS {body.request_id} for {props['name']}: {len(results)} language(s), {counts['submitted']} submitted, {counts['recorded']} recorded, {counts['uncertain']+counts['sending']} uncertain, {counts['rejected']} rejected; reviewed by {body.reviewer.strip()}")
@@ -282,7 +283,7 @@ async def console_strategy_sms(body: StrategySms):
     if not langplan.strategy_valid(body.text,props['name'],facts): raise HTTPException(400,'Strategy text must keep the exercise marker, the district name and the planner facts')
     channel=delivery_config()
     if not channel['configured']: raise HTTPException(503,'Delivery is not configured. Check the Integrations panel for missing server settings.')
-    if channel['provider'] not in ('photon','photon_imessage','twilio_whatsapp','twilio_sms','resend_email','inbox'): raise HTTPException(409,'Console messages require the photon, photon_imessage, twilio_whatsapp, twilio_sms, resend_email or inbox delivery provider')
+    if channel['provider'] not in ('photon','photon_imessage','twilio_whatsapp','twilio_sms','resend_email','ntfy','inbox'): raise HTTPException(409,'Console messages require the photon, photon_imessage, twilio_whatsapp, twilio_sms, resend_email, ntfy or inbox delivery provider')
     results=await deliver_texts(body.request_id,{'strategy':body.text},channel)
     r=results[0]
     audit(f"EXERCISE STRATEGY SMS {body.request_id} for {props['name']} ({facts['outcome']}): {r['state']}; reviewed by {body.reviewer.strip()}")
@@ -291,6 +292,7 @@ async def console_strategy_sms(body: StrategySms):
 @app.get('/api/console/sms-status')
 async def console_sms_status(ids: str=Query(min_length=1,max_length=2000)):
     # Stateless Photon receipt refresh, so receipts survive ephemeral storage.
+    if delivery_config()['provider']=='ntfy': return {'receipts':[{'message_id':i.strip(),'provider_status':'published','status':'ntfy does not report device receipts; confirm on the phone'} for i in ids.split(',') if i.strip()][:40]}
     out=[]
     for mid in list(dict.fromkeys(i.strip() for i in ids.split(',') if i.strip()))[:40]:
         try:
