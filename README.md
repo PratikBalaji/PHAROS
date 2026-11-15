@@ -1,4 +1,6 @@
-# PHAROS — Wildfire & Evacuation Relay
+# HackPrinceton Fall '26 - Sustainability Track
+
+# PHAROS — Wildfire & Evacuation Relay 
 
 An MCP server that reviews wildfire evidence, selects real municipalities and districts, drafts a reviewable **multilingual** exercise alert, and relays it—with a separate map view backed by real fire-weather alerts and fire perimeters. Delivery stays **exercise-only**: no real public alert (IPAWS / WEA) is ever issued.
 
