@@ -278,8 +278,14 @@ class EvacRequest(BaseModel):
 
 @app.post('/api/evac-route')
 async def evac_route(body: EvacRequest):
-    # Reroutes a real road route around a projected-fire polygon; withholds when unsafe.
-    return await resolve_evac_route(body.origin,body.dest,body.avoid)
+    # Reroutes a real road route around a projected-fire hazard (Polygon or MultiPolygon);
+    # withholds when unsafe. The response lists every candidate with its geometry and safe flag.
+    avoid=body.avoid
+    if avoid is not None:
+        polys=avoid.get('coordinates') if isinstance(avoid,dict) else None
+        if not isinstance(avoid,dict) or avoid.get('type') not in ('Polygon','MultiPolygon') or not isinstance(polys,list) or not polys: raise HTTPException(422,'avoid must be a GeoJSON Polygon or MultiPolygon')
+        if avoid['type']=='MultiPolygon' and len(polys)>2000: raise HTTPException(422,'avoid has too many polygons')
+    return await resolve_evac_route(body.origin,body.dest,avoid)
 
 # API-only bundles may omit frontend assets; API startup must still succeed.
 if (ROOT/'dist').is_dir():

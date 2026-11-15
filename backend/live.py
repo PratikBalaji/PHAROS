@@ -9,8 +9,11 @@ road, confirms a real fire, or performs on-device inference. Retrieved content
 is untrusted evidence for operator review, never instructions.
 """
 import csv
+import hashlib
 import io
+import json
 import os
+import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -385,11 +388,31 @@ def _ring_contains(ring, pt):
     return inside
 
 
-def _point_in_polygon(pt, polygon):
-    rings = (polygon or {}).get('coordinates') or []
-    if not rings or not _ring_contains(rings[0], pt):
-        return False
-    return not any(_ring_contains(hole, pt) for hole in rings[1:])
+def _polygons(geom):
+    """A Polygon or MultiPolygon as a list of polygons, each a list of rings. Anything else is empty."""
+    if not isinstance(geom, dict):
+        return []
+    if geom.get('type') == 'MultiPolygon':
+        return geom.get('coordinates') or []
+    return [geom.get('coordinates') or []] if (geom.get('coordinates')) else []
+
+
+def _bbox(ring):
+    xs = [p[0] for p in ring]
+    ys = [p[1] for p in ring]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _point_in_polygon(pt, geom):
+    for rings in _polygons(geom):
+        if not rings:
+            continue
+        x0, y0, x1, y1 = _bbox(rings[0])
+        if pt[0] < x0 or pt[0] > x1 or pt[1] < y0 or pt[1] > y1:
+            continue
+        if _ring_contains(rings[0], pt) and not any(_ring_contains(hole, pt) for hole in rings[1:]):
+            return True
+    return False
 
 
 def _ccw(a, b, c):
@@ -400,14 +423,21 @@ def _segments_cross(a, b, c, d):
     return _ccw(a, c, d) != _ccw(b, c, d) and _ccw(a, b, c) != _ccw(a, b, d)
 
 
-def _line_intersects_polygon(line, polygon):
-    if any(_point_in_polygon(pt, polygon) for pt in line):
+def _line_intersects_polygon(line, geom):
+    if any(_point_in_polygon(pt, geom) for pt in line):
         return True
-    for ring in (polygon or {}).get('coordinates') or []:
-        for i in range(len(ring) - 1):
-            for j in range(len(line) - 1):
-                if _segments_cross(line[j], line[j + 1], ring[i], ring[i + 1]):
-                    return True
+    for rings in _polygons(geom):
+        if not rings:
+            continue
+        x0, y0, x1, y1 = _bbox(rings[0])
+        for j in range(len(line) - 1):
+            a, b = line[j], line[j + 1]
+            if max(a[0], b[0]) < x0 or min(a[0], b[0]) > x1 or max(a[1], b[1]) < y0 or min(a[1], b[1]) > y1:
+                continue
+            for ring in rings:
+                for i in range(len(ring) - 1):
+                    if _segments_cross(a, b, ring[i], ring[i + 1]):
+                        return True
     return False
 
 
@@ -442,8 +472,11 @@ async def _ors_evac_route(origin, dest, avoid, key):
     summary = (feat.get('properties') or {}).get('summary') or {}
     route = _route_feature(feat['geometry'], summary.get('distance'), summary.get('duration'),
                            {'engine': 'ors-avoid-polygons'})
+    listed = [{'id': 'R1', 'distance_m': route['properties']['distance_m'], 'duration_s': route['properties']['duration_s'],
+               'safe': True, 'geometry': feat['geometry']}]
     return {'source': 'OpenRouteService', 'retrieved_at': _now(), 'data_source': 'live',
-            'route': route, 'rerouted': bool(avoid), 'withheld': False, 'candidates': 1, 'note': _ROUTE_NOTE}
+            'route': route, 'rerouted': bool(avoid), 'withheld': False, 'candidates': 1,
+            'candidate_routes': listed, 'chosen_id': 'R1', 'note': _ROUTE_NOTE}
 
 
 async def _osrm_evac_route(origin, dest, avoid):
@@ -454,30 +487,68 @@ async def _osrm_evac_route(origin, dest, avoid):
         raise LiveDataError('Routing provider returned no usable routes', status=502)
     routes = data['routes']
     safe = [r for r in routes if not avoid or not _line_intersects_polygon(r['geometry']['coordinates'], avoid)]
+    listed = [{'id': f'R{i + 1}', 'distance_m': round(r.get('distance') or 0), 'duration_s': round(r.get('duration') or 0),
+               'safe': any(r is x for x in safe), 'geometry': r['geometry']} for i, r in enumerate(routes)]
     if not safe:
-        return _withheld('Every candidate route crosses the projected fire. Route instructions withheld.', len(routes))
+        out = _withheld('Every candidate route crosses the projected fire. Route instructions withheld.', len(routes))
+        out['candidate_routes'] = listed
+        return out
     best = min(safe, key=lambda r: r.get('distance', 0))
     rerouted = bool(avoid) and (best is not routes[0])
     route = _route_feature(best['geometry'], best.get('distance'), best.get('duration'),
                            {'engine': 'osrm-reject-intersecting'})
+    chosen = next(f'R{i + 1}' for i, r in enumerate(routes) if r is best)
     return {'source': 'OSRM', 'retrieved_at': _now(), 'data_source': 'live',
             'route': route, 'rerouted': rerouted, 'withheld': False,
-            'candidates': len(routes), 'safe': len(safe), 'note': _ROUTE_NOTE}
+            'candidates': len(routes), 'safe': len(safe), 'candidate_routes': listed, 'chosen_id': chosen, 'note': _ROUTE_NOTE}
+
+
+_ROUTE_CACHE = {}
+_ROUTE_CACHE_MAX = 256
+
+
+def clear_route_cache():
+    _ROUTE_CACHE.clear()
+
+
+def _cache_ttl():
+    try:
+        return max(0.0, float(os.getenv('PHAROS_ROUTE_CACHE_SECONDS', '30')))
+    except ValueError:
+        return 30.0
+
+
+def _route_key(origin, dest, avoid):
+    digest = hashlib.sha1(json.dumps(avoid, sort_keys=True, separators=(',', ':')).encode()).hexdigest() if avoid else ''
+    return (round(origin[0], 4), round(origin[1], 4), round(dest[0], 4), round(dest[1], 4), digest)
 
 
 async def fetch_evac_route(origin, dest, avoid=None):
-    """origin/dest are [lon, lat]; avoid is a GeoJSON Polygon geometry or None."""
+    """origin/dest are [lon, lat]; avoid is a GeoJSON Polygon or MultiPolygon geometry, or None."""
     if avoid and _point_in_polygon(origin, avoid):
         return _withheld('Origin is inside the projected fire. Shelter guidance required, not a route.')
     if avoid and _point_in_polygon(dest, avoid):
         return _withheld('Destination is inside the projected fire. Choose another assembly point.')
-    key = os.getenv('ORS_API_KEY')
-    if key:
+    ttl = _cache_ttl()
+    key = _route_key(origin, dest, avoid)
+    now = time.monotonic()
+    hit = _ROUTE_CACHE.get(key) if ttl else None
+    if hit and now - hit[0] < ttl:
+        return {**hit[1], 'cached': True}
+    result = None
+    api_key = os.getenv('ORS_API_KEY')
+    if api_key:
         try:
-            return await _ors_evac_route(origin, dest, avoid, key)
+            result = await _ors_evac_route(origin, dest, avoid, api_key)
         except LiveDataError:
-            pass  # fall back to keyless OSRM
-    return await _osrm_evac_route(origin, dest, avoid)
+            result = None  # fall back to keyless OSRM
+    if result is None:
+        result = await _osrm_evac_route(origin, dest, avoid)
+    if ttl:
+        if len(_ROUTE_CACHE) >= _ROUTE_CACHE_MAX:
+            _ROUTE_CACHE.pop(min(_ROUTE_CACHE, key=lambda k: _ROUTE_CACHE[k][0]), None)
+        _ROUTE_CACHE[key] = (now, result)
+    return result
 
 
 async def resolve_evac_route(origin, dest, avoid=None):
