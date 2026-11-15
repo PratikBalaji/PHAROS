@@ -66,7 +66,7 @@ def health():
     return {'status':'ok','mode':'synthetic exercise','storage':'ephemeral-instance' if os.getenv('VERCEL') else 'local-sqlite','bedrock_configured':bool(os.getenv('BEDROCK_MODEL_ID')),'ntfy_configured':bool(os.getenv('NTFY_TOPIC_URL')),'firms_configured':bool(os.getenv('FIRMS_MAP_KEY')),'delivery':delivery_config(),'gemini_configured':gemini.configured(),'ors_configured':bool(os.getenv('ORS_API_KEY'))}
 
 @app.get('/api/scenario')
-def scenario(stage: Literal[0,1,2]=0):
+def scenario(stage: int=Query(0,ge=0,le=2)):
     return {'evidence':tool_result('get_incident_evidence',stage),'routes':check_routes(stage)}
 
 @app.post('/api/drafts')
