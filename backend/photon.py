@@ -35,7 +35,12 @@ async def request(client, method, url, **kwargs):
     except httpx.HTTPError:
         raise PhotonError('Photon request failed. Check the provider before retrying.', method=='POST') from None
     if not response.is_success:
-        raise PhotonError(f'Photon returned HTTP {response.status_code}. Check project access, SMS line and destination setup.', method=='POST' and (response.status_code>=500 or response.status_code in [408,409]))
+        code=''
+        try:
+            raw=response.json().get('code')
+            code=''.join(ch for ch in str(raw)[:48] if ch.isalnum() or ch in '_-') if raw else ''
+        except (ValueError, AttributeError): pass
+        raise PhotonError(f'Photon returned HTTP {response.status_code}{" ("+code+")" if code else ""}. Check project access, SMS line and destination setup.', method=='POST' and (response.status_code>=500 or response.status_code in [408,409]))
     try: return response.json()
     except ValueError:
         raise PhotonError('Photon returned an unreadable response. Check the provider before retrying.', method=='POST') from None
