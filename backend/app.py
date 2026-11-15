@@ -188,6 +188,31 @@ def sms_result(code,row):
     state=row[0]
     return {'code':code,'state':state,'status':'Delivery status uncertain; inspect Photon before retrying' if state=='sending' else row[1],'message_id':receipt.get('message_id'),'provider_status':receipt.get('provider_status')}
 
+async def deliver_texts(request_id,texts,channel):
+    # One idempotent send per (request_id, key). A key is a language code, or 'strategy'.
+    results=[]
+    for code,text in texts.items():
+        with LOCK:
+            with sqlite3.connect(DB_PATH) as db:
+                row=db.execute('SELECT state,status,receipt FROM sms_sends WHERE request_id=? AND code=?',(request_id,code)).fetchone()
+                if not row: db.execute('INSERT INTO sms_sends (request_id,code,state) VALUES (?,?,?)',(request_id,code,'sending'))
+        if row: results.append({**sms_result(code,row),'duplicate':True}); continue
+        receipt=None
+        if channel['provider']=='photon':
+            try:
+                receipt=await send_photon(text,f'pharos-sms-{request_id}-{code}')
+                state,status='submitted',receipt['status']
+            except PhotonError as e:
+                if e.uncertain: state,status='uncertain','Delivery status uncertain; automatic resend blocked'
+                else:
+                    state,status='rejected',str(e)
+                    with sqlite3.connect(DB_PATH) as db: db.execute('DELETE FROM sms_sends WHERE request_id=? AND code=?',(request_id,code))
+        else: state,status='recorded','Recorded in backend test inbox'
+        if state!='rejected':
+            with sqlite3.connect(DB_PATH) as db: db.execute('UPDATE sms_sends SET state=?,status=?,receipt=? WHERE request_id=? AND code=?',(state,status,json.dumps(receipt) if receipt else None,request_id,code))
+        results.append({'code':code,'state':state,'status':status,'message_id':(receipt or {}).get('message_id'),'provider_status':(receipt or {}).get('provider_status'),'duplicate':False})
+    return results
+
 @app.post('/api/console/send-sms')
 async def console_send_sms(body: ConsoleSms):
     # Exercise only. Texts each reviewed, marker-prefixed version to the single configured SMS
@@ -202,30 +227,66 @@ async def console_send_sms(body: ConsoleSms):
     channel=delivery_config()
     if not channel['configured']: raise HTTPException(503,'Delivery is not configured. Check the Integrations panel for missing server settings.')
     if channel['provider'] not in ('photon','inbox'): raise HTTPException(409,'Console SMS requires the photon or inbox delivery provider')
-    results=[]
-    for code,text in body.texts.items():
-        with LOCK:
-            with sqlite3.connect(DB_PATH) as db:
-                row=db.execute('SELECT state,status,receipt FROM sms_sends WHERE request_id=? AND code=?',(body.request_id,code)).fetchone()
-                if not row: db.execute('INSERT INTO sms_sends (request_id,code,state) VALUES (?,?,?)',(body.request_id,code,'sending'))
-        if row: results.append({**sms_result(code,row),'duplicate':True}); continue
-        receipt=None
-        if channel['provider']=='photon':
-            try:
-                receipt=await send_photon(text,f'pharos-sms-{body.request_id}-{code}')
-                state,status='submitted',receipt['status']
-            except PhotonError as e:
-                if e.uncertain: state,status='uncertain','Delivery status uncertain; automatic resend blocked'
-                else:
-                    state,status='rejected',str(e)
-                    with sqlite3.connect(DB_PATH) as db: db.execute('DELETE FROM sms_sends WHERE request_id=? AND code=?',(body.request_id,code))
-        else: state,status='recorded','Recorded in backend test inbox'
-        if state!='rejected':
-            with sqlite3.connect(DB_PATH) as db: db.execute('UPDATE sms_sends SET state=?,status=?,receipt=? WHERE request_id=? AND code=?',(state,status,json.dumps(receipt) if receipt else None,body.request_id,code))
-        results.append({'code':code,'state':state,'status':status,'message_id':(receipt or {}).get('message_id'),'provider_status':(receipt or {}).get('provider_status'),'duplicate':False})
+    results=await deliver_texts(body.request_id,body.texts,channel)
     counts={k:sum(1 for r in results if r['state']==k) for k in ('submitted','recorded','uncertain','rejected','sending')}
     audit(f"EXERCISE SMS {body.request_id} for {props['name']}: {len(results)} language(s), {counts['submitted']} submitted, {counts['recorded']} recorded, {counts['uncertain']+counts['sending']} uncertain, {counts['rejected']} rejected; reviewed by {body.reviewer.strip()}")
     return {'request_id':body.request_id,'geoid':body.geoid,'name':props['name'],'channel':channel['provider'],'public_alert':False,'recipient':'configured test conversation (stands in for the district)','results':results,'counts':counts}
+
+class StrategyFacts(BaseModel):
+    run_name: str=Field(min_length=1,max_length=60,pattern=r"^[A-Za-z0-9 \-']+$")
+    outcome: Literal['arrived','rerouted','driving','withheld']
+    assembly: str|None=Field(default=None,max_length=60,pattern=r"^[A-Za-z0-9 \-'.]+$")
+    minutes: int|None=Field(default=None,ge=1,le=600)
+    km: float|None=Field(default=None,ge=0,le=500)
+
+def check_facts(f):
+    if f.outcome!='withheld' and (not f.assembly or f.minutes is None or f.km is None): raise HTTPException(422,'This outcome needs assembly, minutes and km')
+    return f.model_dump()
+
+class StrategyPlanRequest(BaseModel):
+    geoid: str=Field(min_length=3,max_length=40)
+    facts: StrategyFacts
+
+@app.post('/api/console/strategy-plan')
+async def console_strategy_plan(body: StrategyPlanRequest):
+    # Drafts the strategy text from the planner's facts; Gemini only rephrases. Nothing is sent.
+    facts=check_facts(body.facts)
+    try: return await langplan.resolve_strategy(body.geoid,facts)
+    except ValueError as e: raise HTTPException(422,str(e))
+
+class StrategySms(BaseModel):
+    request_id: str=Field(min_length=8,max_length=64,pattern=r'^[A-Za-z0-9_-]+$')
+    geoid: str=Field(min_length=3,max_length=40)
+    reviewer: str=Field(min_length=1,max_length=80)
+    reviewed: bool
+    facts: StrategyFacts
+    text: str=Field(min_length=20,max_length=langplan.STRATEGY_MAX)
+
+@app.post('/api/console/strategy-sms')
+async def console_strategy_sms(body: StrategySms):
+    if not body.reviewed or not body.reviewer.strip(): raise HTTPException(400,'Named exercise review is required')
+    facts=check_facts(body.facts)
+    try: props=langplan.district(body.geoid)
+    except ValueError as e: raise HTTPException(422,str(e))
+    if not langplan.strategy_valid(body.text,props['name'],facts): raise HTTPException(400,'Strategy text must keep the exercise marker, the district name and the planner facts')
+    channel=delivery_config()
+    if not channel['configured']: raise HTTPException(503,'Delivery is not configured. Check the Integrations panel for missing server settings.')
+    if channel['provider'] not in ('photon','inbox'): raise HTTPException(409,'Console SMS requires the photon or inbox delivery provider')
+    results=await deliver_texts(body.request_id,{'strategy':body.text},channel)
+    r=results[0]
+    audit(f"EXERCISE STRATEGY SMS {body.request_id} for {props['name']} ({facts['outcome']}): {r['state']}; reviewed by {body.reviewer.strip()}")
+    return {'request_id':body.request_id,'geoid':body.geoid,'name':props['name'],'channel':channel['provider'],'public_alert':False,'result':r}
+
+@app.get('/api/console/sms-status')
+async def console_sms_status(ids: str=Query(min_length=1,max_length=2000)):
+    # Stateless Photon receipt refresh, so receipts survive ephemeral storage.
+    out=[]
+    for mid in list(dict.fromkeys(i.strip() for i in ids.split(',') if i.strip()))[:40]:
+        try:
+            r=await refresh_photon({'project_id':os.environ.get('PHOTON_PROJECT_ID'),'message_id':mid})
+            out.append({'message_id':mid,'provider_status':r['provider_status'],'status':r['status']})
+        except PhotonError as e: out.append({'message_id':mid,'error':str(e)})
+    return {'receipts':out}
 
 @app.get('/api/audit')
 def audit_rows():

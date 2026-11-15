@@ -107,3 +107,26 @@ async def translate_message(english_sentence, area, targets):
     if missing:
         raise GeminiError('Gemini translation missing or invalid for: ' + ', '.join(missing))
     return out
+
+
+POLISH_SYSTEM = (
+    'Rewrite a short wildfire EXERCISE (drill) evacuation-strategy text message in plain, calm language at a '
+    '6th-grade reading level, under 420 characters. Use only the facts provided. Keep the place name, assembly '
+    'point name, minutes and kilometres exactly as given; never add roads, times, shelters or instructions that '
+    'are not in the facts. If outcome is "withheld", say no safe route is known and do not name any route or '
+    'destination. It must stay clear that this is a drill and not an evacuation order. Do not add any disclaimer '
+    'prefix; the system adds it.'
+)
+
+
+async def polish_strategy(facts, draft):
+    """Rewrite the deterministic English draft; returns plain text, raises GeminiError if unusable."""
+    result = await _generate(POLISH_SYSTEM, json.dumps({'facts': facts, 'draft': draft}, ensure_ascii=False), {
+        'type': 'OBJECT', 'properties': {'text': {'type': 'STRING'}}, 'required': ['text']})
+    text = result.get('text')
+    if not isinstance(text, str):
+        raise GeminiError('Gemini returned no usable strategy text')
+    text = ' '.join(text.split())
+    if not 20 <= len(text) <= MAX_BODY:
+        raise GeminiError('Gemini strategy text had an unusable length')
+    return text
