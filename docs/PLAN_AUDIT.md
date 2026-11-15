@@ -17,7 +17,7 @@ Reviewed after pulling `116e8e7` from GitHub main. **The hackathon exercise work
 | 99.2% reliability / 2.4-second alert-to-route latency | No statistically supported measurement | Unmeasured targets. Test pass rate is not operational reliability. |
 | Operator review + audit | Named approvals, invalidation, expiry, duplicate test-send protection; Worker R2 persistence | Working deployed exercise workflow. Does not establish production operational readiness. |
 | Multilingual communication | Nine fixed templates; automatic per-district bundles added in this change | Exercise workflow built. No model-based translation/back-translation; non-English templates need native-speaker review. Demographic groups can exceed supported template coverage. |
-| Real demographic targeting | Committed districts contain `demographics_source: illustrative` | Not real demographic estimates yet. Configure Census key, rebuild dataset, inspect results, redeploy. Setting a runtime key alone does not replace the committed dataset. |
+| Real demographic targeting | Committed districts now carry real ACS C16001 demographics (rebuilt with a Census key) | Not real demographic estimates yet. Configure Census key, rebuild dataset, inspect results, redeploy. Setting a runtime key alone does not replace the committed dataset. |
 | Presentation | Six-slide deck embeds app with a timed script | Built. Script must keep distinguishing replay, templates, Python-only capabilities and live services. |
 
 ## Runtime gap that keys alone cannot solve

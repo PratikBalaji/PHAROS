@@ -58,6 +58,7 @@ async function simulate(run) {
       s.route = found.res.route; s.coords = s.route.geometry.coordinates; s.vehicleM = 0; s.arrived = false;
       if (!s.vstep) s.vstep = Math.min(900, Math.max(250, lineLength(s.coords) / TRIP_STEPS));
       s.destName = found.dest.name;
+      out.lastRoute = { assembly: found.dest.name, minutes: Math.max(1, Math.round(s.route.properties.duration_s / 60)), km: Math.round(s.route.properties.distance_m / 100) / 10 };
       if (switched) { out.switches++; out.events.push(`${at} switched to ${found.dest.name} (${reason})`); }
       if (diff.kind === 'rerouted' || switched) out.reroutes++;
       if (diff.kind === 'rerouted' && !switched) out.events.push(`${at} rerouted ${diff.dMin >= 0 ? '+' : ''}${diff.dMin} min (${reason})`);
@@ -96,13 +97,18 @@ async function simulate(run) {
     if (idx !== s.idx) { show(idx); await maybePlan(false); }
   }
   out.calls = calls; out.arrived = s.arrived; out.endedWithRoute = !!s.route;
+  out.outcome = s.arrived ? 'arrived' : !s.route ? 'withheld' : (out.reroutes || out.switches) ? 'rerouted' : 'driving';
   return out;
 }
 
 const wanted = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const runs = wanted.length ? wanted.map(runById) : FIRE_RUNS;
+const JSON_OUT = process.argv.includes('--json'); // machine-readable facts for the SMS sender
+const facts = [];
 for (const run of runs) {
   const r = await simulate(run);
+  if (JSON_OUT) { facts.push({ run: run.id, runName: run.name, geoid: run.geoid, outcome: r.outcome, reroutes: r.reroutes, switches: r.switches, withheld: r.withheld, ...(r.lastRoute || {}) }); continue; }
   console.log(`\n${r.id.padEnd(11)} calls ${String(r.calls).padStart(2)} | reroutes ${r.reroutes} | assembly switches ${r.switches} | withheld ${r.withheld} | restored ${r.resumed} | near-kept ${r.nearKept} | ${r.arrived ? 'ARRIVED' : r.endedWithRoute ? 'still driving' : 'no route at end'}`);
   for (const e of r.events) console.log('   ', e);
 }
+if (JSON_OUT) console.log(JSON.stringify(facts, null, 2));

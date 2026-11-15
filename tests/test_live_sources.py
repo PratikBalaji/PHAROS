@@ -153,3 +153,11 @@ class DemographicsTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class AcsMappingTests(unittest.TestCase):
+    def test_variables_are_the_group_total_rows(self):
+        # C16001 total rows sit at 002, 003, then every third row; the rows between split by English ability.
+        self.assertEqual(sorted(live.ACS_LANGUAGE_VARS),['C16001_%03dE'%n for n in (2,3,6,9,12,15,18,21,24,27,30,33,36)])
+        self.assertEqual(live.ACS_LANGUAGE_VARS['C16001_021E'][0],'zh')
+        self.assertEqual(live.ACS_LANGUAGE_VARS['C16001_015E'][0],'hy')

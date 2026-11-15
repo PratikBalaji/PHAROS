@@ -4,7 +4,7 @@
   "title": "PHAROS curated municipalities & districts (LA / Angeles foothills)",
   "region": "Los Angeles County, CA",
   "boundary_source": "US Census TIGERweb",
-  "demographics_source": "illustrative (set CENSUS_API_KEY for real ACS data)",
+  "demographics_source": "US Census ACS 5-year table C16001",
   "note": "Exercise prototype. Demographics are survey estimates, not real-time. Scenario sub-districts have synthetic boundaries."
  },
  "features": [
@@ -14,7 +14,7 @@
     "GEOID": "0656000",
     "name": "Pasadena city",
     "kind": "municipality",
-    "population": 138000,
+    "population": 129851,
     "centroid": [
      -118.1379537,
      34.1606016
@@ -23,47 +23,72 @@
      {
       "code": "en",
       "label": "English only",
-      "share": 0.58
+      "share": 0.5739
      },
      {
       "code": "es",
       "label": "Spanish",
-      "share": 0.22
+      "share": 0.2519
      },
      {
       "code": "zh",
       "label": "Chinese (Mandarin / Cantonese)",
-      "share": 0.08
+      "share": 0.0596
      },
      {
       "code": "hy",
       "label": "Other Indo-European (incl. Armenian, Farsi)",
-      "share": 0.04
+      "share": 0.0389
      },
      {
       "code": "tl",
       "label": "Tagalog / Filipino",
-      "share": 0.03
+      "share": 0.0221
+     },
+     {
+      "code": "as",
+      "label": "Other Asian / Pacific Island",
+      "share": 0.0137
      },
      {
       "code": "ko",
       "label": "Korean",
-      "share": 0.02
+      "share": 0.0108
      },
      {
       "code": "ot",
       "label": "Other / unspecified",
-      "share": 0.02
+      "share": 0.0065
+     },
+     {
+      "code": "ar",
+      "label": "Arabic",
+      "share": 0.0058
+     },
+     {
+      "code": "ru",
+      "label": "Russian / Polish / other Slavic",
+      "share": 0.0055
+     },
+     {
+      "code": "fr",
+      "label": "French / Haitian / Cajun",
+      "share": 0.0043
+     },
+     {
+      "code": "de",
+      "label": "German / other West Germanic",
+      "share": 0.0041
      },
      {
       "code": "vi",
       "label": "Vietnamese",
-      "share": 0.01
+      "share": 0.003
      }
     ],
     "boundary_source": "TIGERweb",
-    "demographics_source": "illustrative",
-    "demographics_vintage": null
+    "demographics_source": "ACS 5-year (C16001)",
+    "demographics_vintage": "2023"
    },
    "geometry": {
     "type": "Polygon",
@@ -937,56 +962,81 @@
     "GEOID": "0630000",
     "name": "Glendale city",
     "kind": "municipality",
-    "population": 196000,
+    "population": 182699,
     "centroid": [
      -118.2458301,
      34.1813929
     ],
     "languages": [
      {
-      "code": "en",
-      "label": "English only",
-      "share": 0.38
-     },
-     {
       "code": "hy",
       "label": "Other Indo-European (incl. Armenian, Farsi)",
-      "share": 0.34
+      "share": 0.3798
+     },
+     {
+      "code": "en",
+      "label": "English only",
+      "share": 0.3402
      },
      {
       "code": "es",
       "label": "Spanish",
-      "share": 0.12
-     },
-     {
-      "code": "ko",
-      "label": "Korean",
-      "share": 0.04
-     },
-     {
-      "code": "ot",
-      "label": "Other / unspecified",
-      "share": 0.04
-     },
-     {
-      "code": "ru",
-      "label": "Russian / Polish / other Slavic",
-      "share": 0.03
-     },
-     {
-      "code": "zh",
-      "label": "Chinese (Mandarin / Cantonese)",
-      "share": 0.03
+      "share": 0.1357
      },
      {
       "code": "tl",
       "label": "Tagalog / Filipino",
-      "share": 0.02
+      "share": 0.0439
+     },
+     {
+      "code": "ko",
+      "label": "Korean",
+      "share": 0.0286
+     },
+     {
+      "code": "ru",
+      "label": "Russian / Polish / other Slavic",
+      "share": 0.0253
+     },
+     {
+      "code": "ar",
+      "label": "Arabic",
+      "share": 0.0146
+     },
+     {
+      "code": "zh",
+      "label": "Chinese (Mandarin / Cantonese)",
+      "share": 0.0118
+     },
+     {
+      "code": "as",
+      "label": "Other Asian / Pacific Island",
+      "share": 0.0116
+     },
+     {
+      "code": "fr",
+      "label": "French / Haitian / Cajun",
+      "share": 0.0028
+     },
+     {
+      "code": "de",
+      "label": "German / other West Germanic",
+      "share": 0.0023
+     },
+     {
+      "code": "vi",
+      "label": "Vietnamese",
+      "share": 0.0018
+     },
+     {
+      "code": "ot",
+      "label": "Other / unspecified",
+      "share": 0.0015
      }
     ],
     "boundary_source": "TIGERweb",
-    "demographics_source": "illustrative",
-    "demographics_vintage": null
+    "demographics_source": "ACS 5-year (C16001)",
+    "demographics_vintage": "2023"
    },
    "geometry": {
     "type": "Polygon",
@@ -1382,7 +1432,7 @@
     "GEOID": "0671806",
     "name": "Sierra Madre city",
     "kind": "municipality",
-    "population": 11000,
+    "population": 10463,
     "centroid": [
      -118.0502158,
      34.1687705
@@ -1391,27 +1441,62 @@
      {
       "code": "en",
       "label": "English only",
-      "share": 0.8
-     },
-     {
-      "code": "ot",
-      "label": "Other / unspecified",
-      "share": 0.08
-     },
-     {
-      "code": "es",
-      "label": "Spanish",
-      "share": 0.07
+      "share": 0.8092
      },
      {
       "code": "zh",
       "label": "Chinese (Mandarin / Cantonese)",
-      "share": 0.05
+      "share": 0.0702
+     },
+     {
+      "code": "es",
+      "label": "Spanish",
+      "share": 0.0508
+     },
+     {
+      "code": "ar",
+      "label": "Arabic",
+      "share": 0.0256
+     },
+     {
+      "code": "hy",
+      "label": "Other Indo-European (incl. Armenian, Farsi)",
+      "share": 0.0195
+     },
+     {
+      "code": "as",
+      "label": "Other Asian / Pacific Island",
+      "share": 0.0106
+     },
+     {
+      "code": "tl",
+      "label": "Tagalog / Filipino",
+      "share": 0.004
+     },
+     {
+      "code": "de",
+      "label": "German / other West Germanic",
+      "share": 0.0032
+     },
+     {
+      "code": "ot",
+      "label": "Other / unspecified",
+      "share": 0.0032
+     },
+     {
+      "code": "ko",
+      "label": "Korean",
+      "share": 0.0025
+     },
+     {
+      "code": "fr",
+      "label": "French / Haitian / Cajun",
+      "share": 0.0011
      }
     ],
     "boundary_source": "TIGERweb",
-    "demographics_source": "illustrative",
-    "demographics_vintage": null
+    "demographics_source": "ACS 5-year (C16001)",
+    "demographics_vintage": "2023"
    },
    "geometry": {
     "type": "Polygon",
@@ -1467,7 +1552,7 @@
     "GEOID": "0639003",
     "name": "La Cañada Flintridge city",
     "kind": "municipality",
-    "population": 20000,
+    "population": 19264,
     "centroid": [
      -118.2001285,
      34.2112229
@@ -1476,37 +1561,72 @@
      {
       "code": "en",
       "label": "English only",
-      "share": 0.62
+      "share": 0.6804
      },
      {
       "code": "ko",
       "label": "Korean",
-      "share": 0.14
-     },
-     {
-      "code": "zh",
-      "label": "Chinese (Mandarin / Cantonese)",
-      "share": 0.1
+      "share": 0.0956
      },
      {
       "code": "hy",
       "label": "Other Indo-European (incl. Armenian, Farsi)",
-      "share": 0.06
+      "share": 0.0763
      },
      {
       "code": "es",
       "label": "Spanish",
-      "share": 0.04
+      "share": 0.0485
+     },
+     {
+      "code": "zh",
+      "label": "Chinese (Mandarin / Cantonese)",
+      "share": 0.042
+     },
+     {
+      "code": "as",
+      "label": "Other Asian / Pacific Island",
+      "share": 0.0171
+     },
+     {
+      "code": "fr",
+      "label": "French / Haitian / Cajun",
+      "share": 0.0131
+     },
+     {
+      "code": "ru",
+      "label": "Russian / Polish / other Slavic",
+      "share": 0.0087
+     },
+     {
+      "code": "tl",
+      "label": "Tagalog / Filipino",
+      "share": 0.0052
      },
      {
       "code": "ot",
       "label": "Other / unspecified",
-      "share": 0.04
+      "share": 0.0048
+     },
+     {
+      "code": "vi",
+      "label": "Vietnamese",
+      "share": 0.0044
+     },
+     {
+      "code": "de",
+      "label": "German / other West Germanic",
+      "share": 0.0036
+     },
+     {
+      "code": "ar",
+      "label": "Arabic",
+      "share": 0.0004
      }
     ],
     "boundary_source": "TIGERweb",
-    "demographics_source": "illustrative",
-    "demographics_vintage": null
+    "demographics_source": "ACS 5-year (C16001)",
+    "demographics_vintage": "2023"
    },
    "geometry": {
     "type": "Polygon",
@@ -1818,41 +1938,81 @@
     "GEOID": "0602462",
     "name": "Arcadia city",
     "kind": "municipality",
-    "population": 56000,
+    "population": 53125,
     "centroid": [
      -118.0363467,
      34.1326887
     ],
     "languages": [
      {
-      "code": "zh",
-      "label": "Chinese (Mandarin / Cantonese)",
-      "share": 0.44
-     },
-     {
       "code": "en",
       "label": "English only",
-      "share": 0.42
+      "share": 0.4205
      },
      {
-      "code": "ot",
-      "label": "Other / unspecified",
-      "share": 0.06
+      "code": "zh",
+      "label": "Chinese (Mandarin / Cantonese)",
+      "share": 0.3554
      },
      {
       "code": "es",
       "label": "Spanish",
-      "share": 0.05
+      "share": 0.0838
+     },
+     {
+      "code": "as",
+      "label": "Other Asian / Pacific Island",
+      "share": 0.0395
+     },
+     {
+      "code": "hy",
+      "label": "Other Indo-European (incl. Armenian, Farsi)",
+      "share": 0.0322
+     },
+     {
+      "code": "tl",
+      "label": "Tagalog / Filipino",
+      "share": 0.0215
+     },
+     {
+      "code": "vi",
+      "label": "Vietnamese",
+      "share": 0.0174
      },
      {
       "code": "ko",
       "label": "Korean",
-      "share": 0.03
+      "share": 0.0173
+     },
+     {
+      "code": "fr",
+      "label": "French / Haitian / Cajun",
+      "share": 0.0047
+     },
+     {
+      "code": "de",
+      "label": "German / other West Germanic",
+      "share": 0.0025
+     },
+     {
+      "code": "ru",
+      "label": "Russian / Polish / other Slavic",
+      "share": 0.0023
+     },
+     {
+      "code": "ar",
+      "label": "Arabic",
+      "share": 0.0021
+     },
+     {
+      "code": "ot",
+      "label": "Other / unspecified",
+      "share": 0.0008
      }
     ],
     "boundary_source": "TIGERweb",
-    "demographics_source": "illustrative",
-    "demographics_vintage": null
+    "demographics_source": "ACS 5-year (C16001)",
+    "demographics_vintage": "2023"
    },
    "geometry": {
     "type": "Polygon",
@@ -2144,7 +2304,7 @@
     "GEOID": "0648648",
     "name": "Monrovia city",
     "kind": "municipality",
-    "population": 37000,
+    "population": 35236,
     "centroid": [
      -117.9840966,
      34.1632463
@@ -2153,32 +2313,72 @@
      {
       "code": "en",
       "label": "English only",
-      "share": 0.64
+      "share": 0.5783
      },
      {
       "code": "es",
       "label": "Spanish",
-      "share": 0.26
+      "share": 0.2818
      },
      {
       "code": "zh",
       "label": "Chinese (Mandarin / Cantonese)",
-      "share": 0.04
-     },
-     {
-      "code": "ot",
-      "label": "Other / unspecified",
-      "share": 0.04
+      "share": 0.0726
      },
      {
       "code": "tl",
       "label": "Tagalog / Filipino",
-      "share": 0.02
+      "share": 0.0169
+     },
+     {
+      "code": "as",
+      "label": "Other Asian / Pacific Island",
+      "share": 0.0146
+     },
+     {
+      "code": "hy",
+      "label": "Other Indo-European (incl. Armenian, Farsi)",
+      "share": 0.0127
+     },
+     {
+      "code": "vi",
+      "label": "Vietnamese",
+      "share": 0.0069
+     },
+     {
+      "code": "ko",
+      "label": "Korean",
+      "share": 0.0055
+     },
+     {
+      "code": "de",
+      "label": "German / other West Germanic",
+      "share": 0.0037
+     },
+     {
+      "code": "ru",
+      "label": "Russian / Polish / other Slavic",
+      "share": 0.0035
+     },
+     {
+      "code": "ar",
+      "label": "Arabic",
+      "share": 0.0017
+     },
+     {
+      "code": "fr",
+      "label": "French / Haitian / Cajun",
+      "share": 0.0011
+     },
+     {
+      "code": "ot",
+      "label": "Other / unspecified",
+      "share": 0.0006
      }
     ],
     "boundary_source": "TIGERweb",
-    "demographics_source": "illustrative",
-    "demographics_vintage": null
+    "demographics_source": "ACS 5-year (C16001)",
+    "demographics_vintage": "2023"
    },
    "geometry": {
     "type": "Polygon",
@@ -2478,7 +2678,7 @@
     "GEOID": "0601290",
     "name": "Altadena CDP",
     "kind": "district",
-    "population": 42000,
+    "population": 39809,
     "centroid": [
      -118.1355893,
      34.1922117
@@ -2487,37 +2687,72 @@
      {
       "code": "en",
       "label": "English only",
-      "share": 0.68
+      "share": 0.687
      },
      {
       "code": "es",
       "label": "Spanish",
-      "share": 0.18
-     },
-     {
-      "code": "ot",
-      "label": "Other / unspecified",
-      "share": 0.06
-     },
-     {
-      "code": "zh",
-      "label": "Chinese (Mandarin / Cantonese)",
-      "share": 0.03
-     },
-     {
-      "code": "tl",
-      "label": "Tagalog / Filipino",
-      "share": 0.03
+      "share": 0.1974
      },
      {
       "code": "hy",
       "label": "Other Indo-European (incl. Armenian, Farsi)",
-      "share": 0.02
+      "share": 0.0664
+     },
+     {
+      "code": "zh",
+      "label": "Chinese (Mandarin / Cantonese)",
+      "share": 0.0131
+     },
+     {
+      "code": "ot",
+      "label": "Other / unspecified",
+      "share": 0.0066
+     },
+     {
+      "code": "as",
+      "label": "Other Asian / Pacific Island",
+      "share": 0.0063
+     },
+     {
+      "code": "tl",
+      "label": "Tagalog / Filipino",
+      "share": 0.0062
+     },
+     {
+      "code": "fr",
+      "label": "French / Haitian / Cajun",
+      "share": 0.0048
+     },
+     {
+      "code": "de",
+      "label": "German / other West Germanic",
+      "share": 0.0046
+     },
+     {
+      "code": "ko",
+      "label": "Korean",
+      "share": 0.0037
+     },
+     {
+      "code": "ar",
+      "label": "Arabic",
+      "share": 0.003
+     },
+     {
+      "code": "ru",
+      "label": "Russian / Polish / other Slavic",
+      "share": 0.0007
+     },
+     {
+      "code": "vi",
+      "label": "Vietnamese",
+      "share": 0.0003
      }
     ],
     "boundary_source": "TIGERweb",
-    "demographics_source": "illustrative",
-    "demographics_vintage": null
+    "demographics_source": "ACS 5-year (C16001)",
+    "demographics_vintage": "2023"
    },
    "geometry": {
     "type": "MultiPolygon",
@@ -2779,7 +3014,7 @@
     "GEOID": "0639045",
     "name": "La Crescenta-Montrose CDP",
     "kind": "district",
-    "population": 20000,
+    "population": 18797,
     "centroid": [
      -118.2357737,
      34.233016
@@ -2788,37 +3023,67 @@
      {
       "code": "en",
       "label": "English only",
-      "share": 0.55
-     },
-     {
-      "code": "hy",
-      "label": "Other Indo-European (incl. Armenian, Farsi)",
-      "share": 0.18
+      "share": 0.5893
      },
      {
       "code": "ko",
       "label": "Korean",
-      "share": 0.12
+      "share": 0.1432
+     },
+     {
+      "code": "hy",
+      "label": "Other Indo-European (incl. Armenian, Farsi)",
+      "share": 0.104
      },
      {
       "code": "es",
       "label": "Spanish",
-      "share": 0.06
+      "share": 0.0788
+     },
+     {
+      "code": "as",
+      "label": "Other Asian / Pacific Island",
+      "share": 0.0248
+     },
+     {
+      "code": "tl",
+      "label": "Tagalog / Filipino",
+      "share": 0.0169
      },
      {
       "code": "zh",
       "label": "Chinese (Mandarin / Cantonese)",
-      "share": 0.05
+      "share": 0.0126
+     },
+     {
+      "code": "ru",
+      "label": "Russian / Polish / other Slavic",
+      "share": 0.012
+     },
+     {
+      "code": "ar",
+      "label": "Arabic",
+      "share": 0.012
+     },
+     {
+      "code": "de",
+      "label": "German / other West Germanic",
+      "share": 0.0046
+     },
+     {
+      "code": "vi",
+      "label": "Vietnamese",
+      "share": 0.0016
      },
      {
       "code": "ot",
       "label": "Other / unspecified",
-      "share": 0.04
+      "share": 0.0002
      }
     ],
     "boundary_source": "TIGERweb",
-    "demographics_source": "illustrative",
-    "demographics_vintage": null
+    "demographics_source": "ACS 5-year (C16001)",
+    "demographics_vintage": "2023"
    },
    "geometry": {
     "type": "Polygon",
@@ -2954,7 +3219,7 @@
     "GEOID": "SCEN-West-Altadena",
     "name": "West Altadena",
     "kind": "district",
-    "population": 21000,
+    "population": 19904,
     "centroid": [
      -118.15059,
      34.1922117
@@ -2963,37 +3228,72 @@
      {
       "code": "en",
       "label": "English only",
-      "share": 0.68
+      "share": 0.687
      },
      {
       "code": "es",
       "label": "Spanish",
-      "share": 0.18
-     },
-     {
-      "code": "ot",
-      "label": "Other / unspecified",
-      "share": 0.06
-     },
-     {
-      "code": "zh",
-      "label": "Chinese (Mandarin / Cantonese)",
-      "share": 0.03
-     },
-     {
-      "code": "tl",
-      "label": "Tagalog / Filipino",
-      "share": 0.03
+      "share": 0.1974
      },
      {
       "code": "hy",
       "label": "Other Indo-European (incl. Armenian, Farsi)",
-      "share": 0.02
+      "share": 0.0664
+     },
+     {
+      "code": "zh",
+      "label": "Chinese (Mandarin / Cantonese)",
+      "share": 0.0131
+     },
+     {
+      "code": "ot",
+      "label": "Other / unspecified",
+      "share": 0.0066
+     },
+     {
+      "code": "as",
+      "label": "Other Asian / Pacific Island",
+      "share": 0.0063
+     },
+     {
+      "code": "tl",
+      "label": "Tagalog / Filipino",
+      "share": 0.0062
+     },
+     {
+      "code": "fr",
+      "label": "French / Haitian / Cajun",
+      "share": 0.0048
+     },
+     {
+      "code": "de",
+      "label": "German / other West Germanic",
+      "share": 0.0046
+     },
+     {
+      "code": "ko",
+      "label": "Korean",
+      "share": 0.0037
+     },
+     {
+      "code": "ar",
+      "label": "Arabic",
+      "share": 0.003
+     },
+     {
+      "code": "ru",
+      "label": "Russian / Polish / other Slavic",
+      "share": 0.0007
+     },
+     {
+      "code": "vi",
+      "label": "Vietnamese",
+      "share": 0.0003
      }
     ],
     "boundary_source": "scenario-synthetic",
-    "demographics_source": "illustrative (inherited)",
-    "demographics_vintage": null
+    "demographics_source": "ACS 5-year (C16001) (inherited)",
+    "demographics_vintage": "2023"
    },
    "geometry": {
     "type": "Polygon",
@@ -3029,7 +3329,7 @@
     "GEOID": "SCEN-East-Altadena",
     "name": "East Altadena",
     "kind": "district",
-    "population": 21000,
+    "population": 19904,
     "centroid": [
      -118.12059,
      34.1922117
@@ -3038,37 +3338,72 @@
      {
       "code": "en",
       "label": "English only",
-      "share": 0.68
+      "share": 0.687
      },
      {
       "code": "es",
       "label": "Spanish",
-      "share": 0.18
-     },
-     {
-      "code": "ot",
-      "label": "Other / unspecified",
-      "share": 0.06
-     },
-     {
-      "code": "zh",
-      "label": "Chinese (Mandarin / Cantonese)",
-      "share": 0.03
-     },
-     {
-      "code": "tl",
-      "label": "Tagalog / Filipino",
-      "share": 0.03
+      "share": 0.1974
      },
      {
       "code": "hy",
       "label": "Other Indo-European (incl. Armenian, Farsi)",
-      "share": 0.02
+      "share": 0.0664
+     },
+     {
+      "code": "zh",
+      "label": "Chinese (Mandarin / Cantonese)",
+      "share": 0.0131
+     },
+     {
+      "code": "ot",
+      "label": "Other / unspecified",
+      "share": 0.0066
+     },
+     {
+      "code": "as",
+      "label": "Other Asian / Pacific Island",
+      "share": 0.0063
+     },
+     {
+      "code": "tl",
+      "label": "Tagalog / Filipino",
+      "share": 0.0062
+     },
+     {
+      "code": "fr",
+      "label": "French / Haitian / Cajun",
+      "share": 0.0048
+     },
+     {
+      "code": "de",
+      "label": "German / other West Germanic",
+      "share": 0.0046
+     },
+     {
+      "code": "ko",
+      "label": "Korean",
+      "share": 0.0037
+     },
+     {
+      "code": "ar",
+      "label": "Arabic",
+      "share": 0.003
+     },
+     {
+      "code": "ru",
+      "label": "Russian / Polish / other Slavic",
+      "share": 0.0007
+     },
+     {
+      "code": "vi",
+      "label": "Vietnamese",
+      "share": 0.0003
      }
     ],
     "boundary_source": "scenario-synthetic",
-    "demographics_source": "illustrative (inherited)",
-    "demographics_vintage": null
+    "demographics_source": "ACS 5-year (C16001) (inherited)",
+    "demographics_vintage": "2023"
    },
    "geometry": {
     "type": "Polygon",

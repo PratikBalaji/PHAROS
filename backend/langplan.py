@@ -110,3 +110,48 @@ async def resolve_translations(geoid, languages):
     return {'geoid': geoid, 'name': area, 'languages': languages, 'messages': messages,
             'engine': ('Gemini · ' + gemini.model_id()) if used_ai else 'Fixed templates',
             'fallback_reason': reason, 'requires_language_review': any(not m['reviewed'] for m in messages.values())}
+
+
+STRATEGY_MAX = 480
+OUTCOMES = ('arrived', 'rerouted', 'driving', 'withheld')
+
+
+def strategy_draft(area, facts):
+    """Deterministic English strategy text built only from the planner's own result."""
+    run, outcome = facts['run_name'], facts['outcome']
+    tail = 'In a real event, follow your local emergency authority. This is a drill, not an evacuation order.'
+    if outcome == 'withheld':
+        body = (f"{area}, drill \u201c{run}\u201d: the planner found no safe route out. Every exit crosses the projected fire. "
+                'In a real event, shelter and wait for official instructions.')
+        return f"{marker('en')} {body} This is a drill, not an evacuation order."
+    trip = f"{facts['assembly']} (about {facts['minutes']} min, {facts['km']} km)"
+    if outcome == 'arrived':
+        body = f"{area}, drill \u201c{run}\u201d: the latest route update sent traffic to {trip}, clear of the projected fire, and the drive completed."
+    elif outcome == 'rerouted':
+        body = f"{area}, drill \u201c{run}\u201d: the fire spread forced a new route. Now heading to {trip}, avoiding the projected fire."
+    else:
+        body = f"{area}, drill \u201c{run}\u201d: the planner chose a route to {trip} that avoids the projected fire."
+    return f"{marker('en')} {body} {tail}"
+
+
+def strategy_valid(text, area, facts):
+    """Untrusted-text check: marker, district, and the planner's facts must all survive."""
+    if not isinstance(text, str) or not text.startswith(marker('en')) or area not in text or len(text) > STRATEGY_MAX:
+        return False
+    if facts['outcome'] == 'withheld':
+        return not facts.get('assembly') or facts['assembly'] not in text
+    return facts['assembly'] in text and str(facts['minutes']) in text
+
+
+async def resolve_strategy(geoid, facts):
+    area = district(geoid)['name']
+    draft = strategy_draft(area, facts)
+    try:
+        body = await gemini.polish_strategy({**facts, 'place_name': area}, draft.split(marker('en'), 1)[1].strip())
+        polished = f"{marker('en')} {body}"
+        if strategy_valid(polished, area, facts):
+            return {'geoid': geoid, 'name': area, 'text': polished, 'source': 'gemini', 'engine': 'Gemini \u00b7 ' + gemini.model_id(), 'draft': draft}
+        reason = 'Gemini text dropped required facts'
+    except gemini.GeminiError as exc:
+        reason = str(exc)
+    return {'geoid': geoid, 'name': area, 'text': draft, 'source': 'template', 'engine': 'Fixed template', 'fallback_reason': reason, 'draft': draft}
