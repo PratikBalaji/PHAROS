@@ -29,7 +29,7 @@ python3 run.py
 
 On Windows use `py run.py`. The launcher creates `.venv`, installs dependencies, loads local `.env` settings and serves the frontend + backend together at **http://127.0.0.1:8000**. Node.js and cloud hosting are not required. Local exercise messages use a test inbox by default; configure Photon in `.env` to activate SMS.
 
-Presentation: `/presentation/` · API docs: `/docs` · Stop: Ctrl+C. Use `--port 8080` for another port or `--reload` for backend development. [Full local setup instructions](docs/LOCAL_SETUP.md).
+API docs: `/docs` · Stop: Ctrl+C. Use `--port 8080` for another port or `--reload` for backend development. [Full local setup instructions](docs/LOCAL_SETUP.md).
 
 ## Communications console & real data
 
@@ -167,14 +167,13 @@ backend/   FastAPI app (app.py), scenario facts and routing checks (core.py),
            Bedrock tool loop (bedrock.py), stdio/HTTP MCP server (mcp_server.py)
 dist/      Static dashboard: vanilla JS (app.js, core.js, geospatial.js, i18n.js),
            CSS, vendored MapLibre GL JS, data/districts.json (curated recipients),
-           and presentation/ (five-minute browser deck)
 dist/      ... plus firemodel.js (wind-driven cellular fire model), fireruns.js (8 mock runs),
            routeanim.js (pure route/hazard geometry), liveplan.js (which assembly point, keep or replace a route)
 scripts/   build_districts.py — rebuilds dist/data/districts.json from TIGERweb + ACS;
            simulate_runs.mjs — headless replay of the fire runs against live OSRM
 api/       index.py — thin Vercel serverless API (evac-route, perimeters, weather)
-docs/      PRESENTATION.md — presentation setup, deployment, and demo cues
-tests/     Node (geometry, map overlays, i18n, fire model, presentation) and Python (backend, live, sources, evac, mcp, Bedrock) tests
+docs/      setup guides for keys, Photon, Twilio, Resend and ntfy
+tests/     Node (geometry, map overlays, i18n, fire model, live routing) and Python (backend, live, sources, evac, mcp, Bedrock) tests
 work/      Runtime SQLite state (git-ignored, created on first run)
 ```
 
@@ -192,7 +191,7 @@ External resources: Google Fonts (system-font fallback), CARTO Dark Matter vecto
 
 ## Vercel service deployment
 
-The root `vercel.json` routes `/api/*` to the FastAPI service rooted at `api/`, and everything else to the FastAPI service rooted at `.`. `index.py` and `api/index.py` expose the same backend implementation so routes do not drift. Remove any old Vercel project Output Directory override (`dist`) and redeploy using the service configuration. Verify `/api/health` returns JSON before testing the workflow. See [deployment notes](docs/PRESENTATION.md#host-on-vercel).
+The root `vercel.json` defines a single FastAPI service rooted at `.` (`index.py` imports `backend.app`), which serves both `/api/*` and the dashboard from `dist/`. Remove any old Vercel project Output Directory override (`dist`) and redeploy using the service configuration. Verify `/api/health` returns JSON before testing the workflow.
 
 The source configuration has been schema-checked and both ASGI entry points tested locally. This does not prove Vercel build success or provision a managed database.
 

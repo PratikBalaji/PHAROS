@@ -175,11 +175,13 @@ async def console_language_plan(body: LanguagePlanRequest):
 class TranslateRequest(BaseModel):
     geoid: str=Field(min_length=3,max_length=40)
     languages: list[str]=Field(min_length=1,max_length=9)
+    context: str|None=Field(default=None,max_length=200)
 
 @app.post('/api/console/translate')
 async def console_translate(body: TranslateRequest):
-    # Gemini translates; the server adds the fixed exercise marker and flags review. Fixed templates are the fallback.
-    try: return await langplan.resolve_translations(body.geoid,body.languages)
+    # Gemini drafts the message in every language (English included); the server adds the fixed exercise marker
+    # and flags review. Fixed templates are only a labeled fallback when Gemini is unavailable.
+    try: return await langplan.resolve_translations(body.geoid,body.languages,body.context)
     except ValueError as e: raise HTTPException(422,str(e))
 
 class ConsoleSms(BaseModel):

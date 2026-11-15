@@ -13,7 +13,6 @@ On Windows, use `py run.py`. If you already have the repository, run `git pull -
 The launcher creates `.venv`, installs dependencies, creates `.env` without overwriting existing settings, and starts FastAPI on your computer. FastAPI serves both the included frontend and the API at the same address:
 
 - Dashboard: http://127.0.0.1:8000
-- Presentation: http://127.0.0.1:8000/presentation/
 - API docs: http://127.0.0.1:8000/docs
 
 No frontend build is necessary. Keep the terminal open; press Ctrl+C to stop. `python3 run.py --port 8080` chooses another port. `--reload` reloads backend code during development. `--setup-only` installs dependencies and creates configuration without starting the server.

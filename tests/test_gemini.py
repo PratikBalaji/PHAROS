@@ -76,6 +76,36 @@ class ChooseLanguagesTests(unittest.TestCase):
                 run(gemini.choose_languages('Glendale city', SPLIT, ALLOWED))
 
 
+class DraftMessagesTests(unittest.TestCase):
+    TARGETS = {'en': 'English', 'hy': 'Armenian'}
+
+    def test_returns_clean_drafts_for_every_language(self):
+        out = {'messages': [{'code': 'en', 'text': 'Glendale city is holding a wildfire drill. This is not a real emergency.'},
+                            {'code': 'hy', 'text': 'Glendale city: սա հրդեհի վարժանք է, իրական արտակարգ իրավիճակ չէ։'}, {'code': 'xx', 'text': 'ignored'}]}
+        with patch.dict(os.environ, KEY), fake(out):
+            drafts = run(gemini.draft_messages('Glendale city', self.TARGETS, 'a drill'))
+        self.assertEqual(set(drafts), {'en', 'hy'})
+        self.assertIn('scenario_context', FakeClient.calls[0]['json']['contents'][0]['parts'][0]['text'])
+
+    def test_rejects_drafts_with_invented_details_or_missing_area(self):
+        bad_variants = ['Glendale city drill: go to Victory Park at 3pm.',            # digits
+                        'Glendale city drill, see http://example.com for routes.',      # link
+                        'A wildfire drill is happening nearby. Not a real emergency.',  # area name missing
+                        'Glendale city',                                                # too short
+                        'Glendale city drill. ' + 'x' * 500]                            # too long
+        for text in bad_variants:
+            out = {'messages': [{'code': 'en', 'text': text}]}
+            with patch.dict(os.environ, KEY), fake(out):
+                with self.assertRaises(gemini.GeminiError):
+                    run(gemini.draft_messages('Glendale city', {'en': 'English'}))
+
+    def test_missing_language_raises_so_callers_can_fall_back(self):
+        out = {'messages': [{'code': 'en', 'text': 'Glendale city is holding a wildfire drill. This is not a real emergency.'}]}
+        with patch.dict(os.environ, KEY), fake(out):
+            with self.assertRaises(gemini.GeminiError):
+                run(gemini.draft_messages('Glendale city', self.TARGETS))
+
+
 class TranslateTests(unittest.TestCase):
     def test_returns_translations_that_name_the_area(self):
         out = {'translations': [{'code': 'es', 'text': 'Glendale city: hay un simulacro de evacuación.'}]}
