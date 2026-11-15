@@ -51,25 +51,35 @@ class LanguagePlanTests(unittest.TestCase):
 
 
 class TranslationTests(unittest.TestCase):
-    def test_server_adds_marker_and_flags_review(self):
-        tr = AsyncMock(return_value={'hy': 'Glendale city: Հրդեհի տարհանման վարժանք է:'})
-        with patch.object(gemini, 'translate_message', tr):
-            out = run(langplan.resolve_translations(GLENDALE, ['hy']))
-        hy = out['messages']['hy']
-        self.assertTrue(hy['text'].startswith(langplan.marker('hy')))
-        self.assertEqual(hy['source'], 'gemini')
-        self.assertFalse(hy['reviewed'])
-        self.assertTrue(out['messages']['en']['reviewed'])
-        self.assertEqual(out['messages']['en']['source'], 'template')
+    def test_gemini_drafts_every_language_and_server_adds_marker(self):
+        drafted = {'en': 'Glendale city is running a wildfire drill. This is not a real emergency.',
+                   'hy': 'Glendale city: սա հրդեհի վարժանք է, իրական արտակարգ իրավիճակ չէ։'}
+        dr = AsyncMock(return_value=drafted)
+        with patch.object(gemini, 'draft_messages', dr):
+            out = run(langplan.resolve_translations(GLENDALE, ['hy'], 'Verdugo Hills drill'))
+        self.assertEqual(dr.await_args.args[2], 'Verdugo Hills drill')
+        self.assertEqual(set(dr.await_args.args[1]), {'en', 'hy'})  # English is drafted too, not hardcoded
+        for code in ('en', 'hy'):
+            m = out['messages'][code]
+            self.assertTrue(m['text'].startswith(langplan.marker(code)))
+            self.assertEqual((m['source'], m['reviewed']), ('gemini', False))
+        self.assertIn(drafted['en'], out['messages']['en']['text'])
         self.assertTrue(out['engine'].startswith('Gemini'))
+        self.assertTrue(out['requires_language_review'])
 
-    def test_failure_uses_fixed_templates(self):
-        with patch.object(gemini, 'translate_message', AsyncMock(side_effect=gemini.GeminiError('bad'))):
+    def test_failure_uses_fixed_templates_and_says_so(self):
+        with patch.object(gemini, 'draft_messages', AsyncMock(side_effect=gemini.GeminiError('bad'))):
             out = run(langplan.resolve_translations(GLENDALE, ['hy', 'es']))
-        self.assertEqual(out['engine'], 'Fixed templates')
+        self.assertEqual(out['engine'], 'Fixed templates (Gemini unavailable)')
         self.assertTrue(all(m['source'] == 'template' for m in out['messages'].values()))
         self.assertEqual(out['fallback_reason'], 'bad')
         self.assertTrue(out['messages']['hy']['text'].startswith(langplan.marker('hy')))
+
+    def test_endpoint_accepts_context(self):
+        with patch.object(gemini, 'draft_messages', AsyncMock(return_value={'en': 'Glendale city drill, not a real emergency.'})):
+            r = client.post('/api/console/translate', json={'geoid': GLENDALE, 'languages': ['en'], 'context': 'Verdugo Hills'})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()['messages']['en']['source'], 'gemini')
 
 
 def texts(codes=('en', 'es')):

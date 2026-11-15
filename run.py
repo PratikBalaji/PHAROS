@@ -60,7 +60,6 @@ def main():
         print('Local setup is ready. Run python3 run.py (Windows: py run.py).')
         return
     print(f'PHAROS:      http://127.0.0.1:{args.port}', flush=True)
-    print(f'Presentation: http://127.0.0.1:{args.port}/presentation/', flush=True)
     print(f'API docs:     http://127.0.0.1:{args.port}/docs', flush=True)
     print('Press Ctrl+C to stop.', flush=True)
     import uvicorn

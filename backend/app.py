@@ -66,7 +66,7 @@ def health():
     return {'status':'ok','mode':'synthetic exercise','storage':'ephemeral-instance' if os.getenv('VERCEL') else 'local-sqlite','bedrock_configured':bool(os.getenv('BEDROCK_MODEL_ID')),'ntfy_configured':bool(os.getenv('NTFY_TOPIC_URL')),'firms_configured':bool(os.getenv('FIRMS_MAP_KEY')),'delivery':delivery_config(),'gemini_configured':gemini.configured(),'ors_configured':bool(os.getenv('ORS_API_KEY'))}
 
 @app.get('/api/scenario')
-def scenario(stage: Literal[0,1,2]=0):
+def scenario(stage: int=Query(0,ge=0,le=2)):
     return {'evidence':tool_result('get_incident_evidence',stage),'routes':check_routes(stage)}
 
 @app.post('/api/drafts')
@@ -175,11 +175,13 @@ async def console_language_plan(body: LanguagePlanRequest):
 class TranslateRequest(BaseModel):
     geoid: str=Field(min_length=3,max_length=40)
     languages: list[str]=Field(min_length=1,max_length=9)
+    context: str|None=Field(default=None,max_length=200)
 
 @app.post('/api/console/translate')
 async def console_translate(body: TranslateRequest):
-    # Gemini translates; the server adds the fixed exercise marker and flags review. Fixed templates are the fallback.
-    try: return await langplan.resolve_translations(body.geoid,body.languages)
+    # Gemini drafts the message in every language (English included); the server adds the fixed exercise marker
+    # and flags review. Fixed templates are only a labeled fallback when Gemini is unavailable.
+    try: return await langplan.resolve_translations(body.geoid,body.languages,body.context)
     except ValueError as e: raise HTTPException(422,str(e))
 
 class ConsoleSms(BaseModel):
