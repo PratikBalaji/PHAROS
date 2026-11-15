@@ -78,3 +78,6 @@ node scripts/send_exercise_sms.mjs --facts facts.json --send --reviewer "Your Na
 
 ## Fallback: Mac iMessage sidecar
 If Photon's hosted SMS refuses sends (for example HTTP 409), run the sidecar on a Mac signed into Messages. Step-by-step directions: `sidecar/photon/README.md`. The same sender script delivers to it with `--sidecar`.
+
+## Hosted iMessage provider (`photon_imessage`)
+Uses Photon's documented outbound endpoint `POST https://api.beta.photon.codes/v1/projects/{project}/platforms/imessage/send` with `{ "to", "message" }`. Set on the server: `PHAROS_DELIVERY_PROVIDER=photon_imessage`, `PHOTON_API_KEY`, `PHOTON_PROJECT_ID`, `PHOTON_IMESSAGE_TO` (the one fixed recipient, e.g. `+13464468717`). `PHOTON_SENDER_ID` and `PHOTON_SPACE_ID` are not used. A 200 means Photon accepted it; delivery is not reported back, so confirm on the phone.

@@ -17,3 +17,8 @@ Receipts come from Twilio: queued, sent, delivered, read or failed. The sandbox 
 
 ## Plain SMS instead (you have a Twilio phone number)
 Set `PHAROS_DELIVERY_PROVIDER=twilio_sms`, `TWILIO_FROM` (your Twilio number, e.g. `+17372583742`) and `TWILIO_TO` (your phone), plus the SID and token. Caveats: a trial account can only text **verified** numbers and prefixes messages with "Sent from your Twilio trial account"; US carriers filter unregistered local numbers (A2P 10DLC), which shows up as error 30034 or "undelivered"; Armenian, Chinese, Korean and Arabic texts use more SMS segments. WhatsApp sandbox avoids the registration problem.
+
+## Why a send is refused (from Twilio's docs)
+- **Error 572006 (SMS):** trial accounts may send only Twilio's predefined SMS templates, not custom text. Upgrade the account for custom bodies.
+- **Error 21654 (WhatsApp):** free-form text is allowed only inside the 24-hour window opened when your phone sends `join <code>` (or any message) to the sandbox number. Send it again right before the run. Outside the window only approved templates work.
+- The sandbox sends at most one message per 3 seconds (the server paces Twilio sends) and the join expires after 3 days.
