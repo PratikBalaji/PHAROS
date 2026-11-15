@@ -5,7 +5,7 @@ import httpx
 from .photon import PhotonError
 
 API = 'https://api.twilio.com/2010-04-01/Accounts/'
-FIELDS = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_WHATSAPP_FROM', 'TWILIO_TO']
+PROVIDERS = ('twilio_whatsapp', 'twilio_sms')
 STATUSES = ['accepted', 'scheduled', 'queued', 'sending', 'sent', 'delivered', 'read', 'undelivered', 'failed', 'receiving', 'received']
 MAX_BODY = 1600
 
@@ -19,13 +19,31 @@ def _number(value):
     return v if re.fullmatch(r'\+[1-9]\d{7,14}', v) else None
 
 
+def _sms():
+    return os.getenv('PHAROS_DELIVERY_PROVIDER') == 'twilio_sms'
+
+
+def _from_var():
+    # SMS uses TWILIO_FROM (your Twilio number); WhatsApp uses TWILIO_WHATSAPP_FROM (e.g. the sandbox number).
+    return 'TWILIO_FROM' if _sms() else 'TWILIO_WHATSAPP_FROM'
+
+
+def _label():
+    return 'SMS' if _sms() else 'WhatsApp'
+
+
+def _addr(number):
+    return number if _sms() else 'whatsapp:' + number
+
+
 def twilio_config():
-    missing = [k for k in FIELDS if not os.getenv(k)]
+    fields = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', _from_var(), 'TWILIO_TO']
+    missing = [k for k in fields if not os.getenv(k)]
     invalid = []
     if os.getenv('TWILIO_ACCOUNT_SID') and not re.fullmatch(r'AC[0-9a-f]{32}', os.environ['TWILIO_ACCOUNT_SID']): invalid.append('TWILIO_ACCOUNT_SID')
-    for k in ('TWILIO_WHATSAPP_FROM', 'TWILIO_TO'):
+    for k in (_from_var(), 'TWILIO_TO'):
         if os.getenv(k) and not _number(os.environ[k]): invalid.append(k)
-    return dict(provider='twilio_whatsapp', channel='whatsapp', configured=not missing and not invalid, missing=missing, invalid=invalid)
+    return dict(provider='twilio_sms' if _sms() else 'twilio_whatsapp', channel='sms' if _sms() else 'whatsapp', configured=not missing and not invalid, missing=missing, invalid=invalid)
 
 
 def _client():
@@ -63,17 +81,16 @@ def receipt(message):
     if not isinstance(sid, str) or not re.fullmatch(r'(SM|MM)[0-9a-f]{32}', sid) or status not in STATUSES:
         seen = ''.join(ch for ch in str(status)[:20] if ch.isalnum() or ch in '_-')
         raise TwilioError(f'Twilio returned an unrecognized receipt (status: {seen or "none"}). Check the provider before retrying.', True)
-    text = ('Twilio reports WhatsApp delivered' if status in ('delivered', 'read')
-            else 'Twilio reports WhatsApp delivery failed' if status in ('failed', 'undelivered')
-            else 'Accepted by Twilio; WhatsApp delivery unconfirmed')
-    return dict(provider='twilio_whatsapp', message_id=sid, provider_status=status, status=text)
+    text = (f'Twilio reports {_label()} delivered' if status in ('delivered', 'read')
+            else f'Twilio reports {_label()} delivery failed' if status in ('failed', 'undelivered')
+            else f'Accepted by Twilio; {_label()} delivery unconfirmed')
+    return dict(provider='twilio_sms' if _sms() else 'twilio_whatsapp', message_id=sid, provider_status=status, status=text)
 
 
 async def send_twilio(text, key):
     if len(text) > MAX_BODY:
         raise TwilioError('Message is longer than WhatsApp allows through Twilio (1600 characters).')
-    data = {'From': 'whatsapp:' + _number(os.environ['TWILIO_WHATSAPP_FROM']),
-            'To': 'whatsapp:' + _number(os.environ['TWILIO_TO']), 'Body': text}
+    data = {'From': _addr(_number(os.environ[_from_var()])), 'To': _addr(_number(os.environ['TWILIO_TO'])), 'Body': text}
     return receipt(await _request('POST', _base() + '/Messages.json', data=data, headers={'I-Twilio-Idempotency-Token': key}))
 
 

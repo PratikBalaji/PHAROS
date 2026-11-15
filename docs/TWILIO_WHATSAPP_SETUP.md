@@ -14,3 +14,6 @@ Free to try: a Twilio trial account includes credit, and the WhatsApp **sandbox*
 6. Redeploy, check `/api/health` shows `delivery.provider` `twilio_whatsapp` and `configured: true`, then run the sender (see `docs/PHOTON_SETUP.md`, scripts section) starting with one run.
 
 Receipts come from Twilio: queued, sent, delivered, read or failed. The sandbox allows free-form text, so all languages work.
+
+## Plain SMS instead (you have a Twilio phone number)
+Set `PHAROS_DELIVERY_PROVIDER=twilio_sms`, `TWILIO_FROM` (your Twilio number, e.g. `+17372583742`) and `TWILIO_TO` (your phone), plus the SID and token. Caveats: a trial account can only text **verified** numbers and prefixes messages with "Sent from your Twilio trial account"; US carriers filter unregistered local numbers (A2P 10DLC), which shows up as error 30034 or "undelivered"; Armenian, Chinese, Korean and Arabic texts use more SMS segments. WhatsApp sandbox avoids the registration problem.
