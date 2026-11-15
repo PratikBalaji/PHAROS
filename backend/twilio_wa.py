@@ -91,7 +91,7 @@ async def send_twilio(text, key):
     if len(text) > MAX_BODY:
         raise TwilioError('Message is longer than WhatsApp allows through Twilio (1600 characters).')
     data = {'From': _addr(_number(os.environ[_from_var()])), 'To': _addr(_number(os.environ['TWILIO_TO'])), 'Body': text}
-    return receipt(await _request('POST', _base() + '/Messages.json', data=data, headers={'I-Twilio-Idempotency-Token': key}))
+    return receipt(await _request('POST', _base() + '/Messages.json', data=data))
 
 
 async def refresh_twilio(message_id):
