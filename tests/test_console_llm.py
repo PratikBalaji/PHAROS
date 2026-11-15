@@ -12,7 +12,7 @@ from backend import app as appmod, gemini, langplan
 from backend.photon import PhotonError
 
 client = TestClient(appmod.app)
-GLENDALE = '0630000'   # committed dataset: English 38%, Armenian 34%, Spanish 12%
+GLENDALE = '0630000'   # committed ACS dataset: Armenian-heavy (C16001 'Other Indo-European') ~38%, English ~34%, Spanish ~14%
 SIERRA = '0671806'     # mostly English
 
 
@@ -132,6 +132,83 @@ class SendSmsTests(unittest.TestCase):
         off = {'provider': 'photon', 'configured': False, 'missing': ['PHOTON_API_KEY'], 'invalid': []}
         with patch.object(appmod, 'delivery_config', lambda: off):
             self.assertEqual(client.post('/api/console/send-sms', json=sms_body('req-off-0001')).status_code, 503)
+
+
+FACTS = {'run_name': 'Altadena Ridge', 'outcome': 'rerouted', 'assembly': 'Victory Park', 'minutes': 9, 'km': 4.2}
+WITHHELD = {'run_name': 'Verdugo Hills', 'outcome': 'withheld'}
+
+
+def strategy_body(request_id, text, facts=FACTS, **kw):
+    body = {'request_id': request_id, 'geoid': GLENDALE, 'reviewer': 'Op', 'reviewed': True, 'facts': facts, 'text': text}
+    body.update(kw)
+    return body
+
+
+class StrategyTests(unittest.TestCase):
+    def test_draft_uses_only_planner_facts(self):
+        text = langplan.strategy_draft('Glendale city', FACTS)
+        self.assertTrue(text.startswith(langplan.marker('en')))
+        for needle in ('Victory Park', '9 min', '4.2 km', 'Glendale city'):
+            self.assertIn(needle, text)
+        held = langplan.strategy_draft('Glendale city', WITHHELD)
+        self.assertIn('no safe route', held)
+        self.assertNotIn('Victory Park', held)
+        self.assertNotIn('min,', held)
+
+    def test_gemini_polish_is_used_when_it_keeps_the_facts(self):
+        good = 'Glendale city, drill: the fire moved, so you now head to Victory Park, about 9 minutes away. This is a drill.'
+        with patch.object(gemini, 'polish_strategy', AsyncMock(return_value=good)):
+            out = run(langplan.resolve_strategy(GLENDALE, FACTS))
+        self.assertEqual(out['source'], 'gemini')
+        self.assertTrue(out['text'].startswith(langplan.marker('en')))
+
+    def test_polish_that_drops_facts_or_fails_falls_back_to_the_draft(self):
+        bad = 'Go somewhere safe, quickly. This is a drill.'
+        with patch.object(gemini, 'polish_strategy', AsyncMock(return_value=bad)):
+            out = run(langplan.resolve_strategy(GLENDALE, FACTS))
+        self.assertEqual((out['source'], out['text']), ('template', out['draft']))
+        with patch.object(gemini, 'polish_strategy', AsyncMock(side_effect=gemini.GeminiError('down'))):
+            out = run(langplan.resolve_strategy(GLENDALE, FACTS))
+        self.assertEqual(out['fallback_reason'], 'down')
+
+    def test_withheld_text_may_not_invent_a_destination(self):
+        invented = f"{langplan.marker('en')} Glendale city: no safe route. Try Victory Park. This is a drill."
+        self.assertFalse(langplan.strategy_valid(invented, 'Glendale city', {**WITHHELD, 'assembly': 'Victory Park'}))
+        self.assertTrue(langplan.strategy_valid(langplan.strategy_draft('Glendale city', WITHHELD), 'Glendale city', WITHHELD))
+
+    def test_plan_endpoint_validates_facts(self):
+        self.assertEqual(client.post('/api/console/strategy-plan', json={'geoid': GLENDALE, 'facts': {'run_name': 'X', 'outcome': 'arrived'}}).status_code, 422)
+        self.assertEqual(client.post('/api/console/strategy-plan', json={'geoid': GLENDALE, 'facts': {**FACTS, 'outcome': 'teleported'}}).status_code, 422)
+        with patch.dict(os.environ, {'GEMINI_API_KEY': ''}):
+            r = client.post('/api/console/strategy-plan', json={'geoid': GLENDALE, 'facts': WITHHELD})
+        self.assertEqual((r.status_code, r.json()['source']), (200, 'template'))
+
+    def test_send_gates(self):
+        good = langplan.strategy_draft('Glendale city', FACTS)
+        self.assertEqual(client.post('/api/console/strategy-sms', json=strategy_body('req-strat-g1', good, reviewed=False)).status_code, 400)
+        self.assertEqual(client.post('/api/console/strategy-sms', json=strategy_body('req-strat-g2', 'Evacuate right now to the park please.')).status_code, 400)
+        self.assertEqual(client.post('/api/console/strategy-sms', json=strategy_body('req-strat-g3', good.replace('Victory Park', 'Elsewhere'))).status_code, 400)
+        self.assertEqual(client.post('/api/console/strategy-sms', json=strategy_body('req-strat-g4', good, reviewer=' ')).status_code, 400)
+
+    def test_send_once_per_request_and_receipts_survive_without_storage(self):
+        good = langplan.strategy_draft('Glendale city', FACTS)
+        send = AsyncMock(return_value=RECEIPT)
+        with patch.object(appmod, 'delivery_config', lambda: PHOTON), patch.object(appmod, 'send_photon', send):
+            first = client.post('/api/console/strategy-sms', json=strategy_body('req-strat-01', good)).json()
+            again = client.post('/api/console/strategy-sms', json=strategy_body('req-strat-01', good)).json()
+        self.assertEqual(send.await_count, 1)
+        self.assertEqual(send.await_args.args[1], 'pharos-sms-req-strat-01-strategy')
+        self.assertEqual((first['result']['state'], first['public_alert']), ('submitted', False))
+        self.assertTrue(again['result']['duplicate'])
+        fresh = {'provider': 'photon', 'message_id': 'pho_msg_x', 'provider_status': 'delivered', 'status': 'Photon reports SMS delivered'}
+        with patch.object(appmod, 'refresh_photon', AsyncMock(return_value=fresh)), patch.dict(os.environ, {'PHOTON_PROJECT_ID': 'pho_prj_x'}):
+            r = client.get('/api/console/sms-status', params={'ids': 'pho_msg_x,pho_msg_x'}).json()
+        self.assertEqual(r['receipts'], [{'message_id': 'pho_msg_x', 'provider_status': 'delivered', 'status': 'Photon reports SMS delivered'}])
+
+    def test_status_reports_per_id_errors(self):
+        with patch.object(appmod, 'refresh_photon', AsyncMock(side_effect=PhotonError('nope'))):
+            r = client.get('/api/console/sms-status', params={'ids': 'bad'}).json()
+        self.assertEqual(r['receipts'], [{'message_id': 'bad', 'error': 'nope'}])
 
 
 if __name__ == '__main__':

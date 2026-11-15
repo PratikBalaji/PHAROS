@@ -63,3 +63,15 @@ Provider keys stay server-side. Raw provider responses and errors are not includ
 - [Photon MCP, Beta](https://photon.codes/docs/beta/ai-tools/mcp)
 - [Photon API, Beta](https://photon.codes/docs/beta/api-reference/index)
 - [Published OpenAPI contract](https://api.photon.codes/openapi.json): send uses `POST /v1/projects/{id}/messages` with `senderId`, `spaceId`, text content and `idempotency-key`; SMS conversation lookup and message receipt lookup use GET.
+
+## Exercise SMS for every fire run (scripted)
+After `main` is deployed, the sender drafts and sends, per Live Explorer run, the AI-chosen translated language texts (English plus the top two other languages for that district) and one Gemini-polished strategy text built from the planner's own result:
+
+```bash
+export NODE_USE_ENV_PROXY=1            # only needed behind a proxy
+node scripts/simulate_runs.mjs --json > facts.json
+node scripts/send_exercise_sms.mjs --facts facts.json            # dry run, writes exercise_drafts.md
+node scripts/send_exercise_sms.mjs --facts facts.json --send --reviewer "Your Name" verdugo   # one run first
+```
+
+`POST /api/console/strategy-plan` drafts the strategy text from facts only; `POST /api/console/strategy-sms` sends the reviewed text (named reviewer, exercise marker, district name and planner facts must survive). `GET /api/console/sms-status?ids=...` refreshes Photon receipts without server storage. Withheld runs never name a route.

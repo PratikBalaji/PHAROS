@@ -189,20 +189,21 @@ ACS_URL = 'https://api.census.gov/data/2023/acs/acs5'
 
 # ACS table C16001 "Language Spoken at Home" — the per-group total lines only.
 # Armenian, Farsi, etc. fall under "Other Indo-European" at this table's grain.
+# (The rows between are splits by English ability, so they are skipped.)
 ACS_LANGUAGE_VARS = {
     'C16001_002E': ('en', 'English only'),
     'C16001_003E': ('es', 'Spanish'),
-    'C16001_005E': ('fr', 'French / Haitian / Cajun'),
-    'C16001_007E': ('de', 'German / other West Germanic'),
-    'C16001_009E': ('ru', 'Russian / Polish / other Slavic'),
-    'C16001_011E': ('hy', 'Other Indo-European (incl. Armenian, Farsi)'),
-    'C16001_013E': ('ko', 'Korean'),
-    'C16001_015E': ('zh', 'Chinese (Mandarin / Cantonese)'),
-    'C16001_017E': ('vi', 'Vietnamese'),
-    'C16001_019E': ('tl', 'Tagalog / Filipino'),
-    'C16001_021E': ('as', 'Other Asian / Pacific Island'),
-    'C16001_023E': ('ar', 'Arabic'),
-    'C16001_025E': ('ot', 'Other / unspecified'),
+    'C16001_006E': ('fr', 'French / Haitian / Cajun'),
+    'C16001_009E': ('de', 'German / other West Germanic'),
+    'C16001_012E': ('ru', 'Russian / Polish / other Slavic'),
+    'C16001_015E': ('hy', 'Other Indo-European (incl. Armenian, Farsi)'),
+    'C16001_018E': ('ko', 'Korean'),
+    'C16001_021E': ('zh', 'Chinese (Mandarin / Cantonese)'),
+    'C16001_024E': ('vi', 'Vietnamese'),
+    'C16001_027E': ('tl', 'Tagalog / Filipino'),
+    'C16001_030E': ('as', 'Other Asian / Pacific Island'),
+    'C16001_033E': ('ar', 'Arabic'),
+    'C16001_036E': ('ot', 'Other / unspecified'),
 }
 
 

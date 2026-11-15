@@ -7,7 +7,7 @@ class BroadcastTests(unittest.TestCase):
     def test_all_languages_per_area(self):
         p=build_plan(['0630000','0602462'],'all')
         self.assertEqual(p['message_count'],18)
-        self.assertTrue(p['has_illustrative_data'])
+        self.assertEqual(p['has_illustrative_data'],any(not a['demographics_source'].startswith('ACS') for a in p['areas']))
         for area in p['areas']:
             self.assertTrue(all(area['name'] in m['text'] for m in area['messages']))
     def test_stored_bundle_round_trip(self):
