@@ -203,7 +203,7 @@ async def deliver_texts(request_id,texts,channel):
                 receipt=await send_photon(text,f'pharos-sms-{request_id}-{code}')
                 state,status='submitted',receipt['status']
             except PhotonError as e:
-                if e.uncertain: state,status='uncertain','Delivery status uncertain; automatic resend blocked'
+                if e.uncertain: state,status='uncertain',f'Delivery status uncertain; automatic resend blocked. Reason: {e}'
                 else:
                     state,status='rejected',str(e)
                     with sqlite3.connect(DB_PATH) as db: db.execute('DELETE FROM sms_sends WHERE request_id=? AND code=?',(request_id,code))

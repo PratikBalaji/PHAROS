@@ -42,7 +42,9 @@ async def request(client, method, url, **kwargs):
 
 def receipt(message):
     if not isinstance(message,dict) or not valid_id(message.get('id'),'msg') or message.get('status') not in ['dispatched','accepted','delivered','failed']:
-        raise PhotonError('Photon returned an unrecognized receipt. Check the provider before retrying.', True)
+        seen=message.get('status') if isinstance(message,dict) else None
+        detail=''.join(ch for ch in str(seen)[:24] if ch.isalnum() or ch in '_-') if seen is not None else 'none'
+        raise PhotonError(f'Photon returned an unrecognized receipt (status: {detail}). Check the provider before retrying.', True)
     status = message['status']
     return dict(provider='photon', message_id=message['id'], provider_status=status, project_id=os.environ['PHOTON_PROJECT_ID'], status='Photon reports SMS delivered' if status=='delivered' else 'Photon reports SMS delivery failed' if status=='failed' else 'Accepted by Photon; SMS delivery unconfirmed')
 
