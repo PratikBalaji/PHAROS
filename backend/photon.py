@@ -17,6 +17,9 @@ def photon_config():
 def delivery_config():
     provider = os.getenv('PHAROS_DELIVERY_PROVIDER') or ('photon' if any(os.getenv(k) for k in FIELDS) else 'ntfy' if os.getenv('NTFY_TOPIC_URL') else 'inbox')
     if provider == 'photon': return photon_config()
+    if provider == 'photon_imessage':
+        from .photon_imessage import imessage_config
+        return imessage_config()
     if provider == 'resend_email':
         from .resend_email import resend_config
         return resend_config()
