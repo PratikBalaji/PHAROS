@@ -1,0 +1,13 @@
+{
+  "name": "pharos-photon-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Runs on a Mac signed into Messages and sends EXERCISE-marked iMessages to one fixed test recipient.",
+  "scripts": { "start": "node server.mjs" },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@photon-ai/imessage-kit": "^3.0.0",
+    "better-sqlite3": "^11.0.0"
+  }
+}
