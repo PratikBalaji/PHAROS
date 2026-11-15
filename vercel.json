@@ -4,19 +4,9 @@
     "app": {
       "root": ".",
       "framework": "fastapi"
-    },
-    "api": {
-      "root": "api",
-      "framework": "fastapi"
     }
   },
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": {
-        "service": "api"
-      }
-    },
     {
       "source": "/(.*)",
       "destination": {
