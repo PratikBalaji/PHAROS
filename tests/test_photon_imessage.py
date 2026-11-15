@@ -61,6 +61,17 @@ class ImessageTests(unittest.TestCase):
                 with self.assertRaises(photon_imessage.PhotonImessageError) as e: run(photon_imessage.send_imessage('x' * 30, 'k'))
                 self.assertTrue(e.exception.uncertain)
 
+    def test_connection_failure_names_the_cause_and_is_not_uncertain(self):
+        def boom(req): raise httpx.ConnectError('dns')
+        with patch.dict(os.environ, ENV, clear=True), patch.object(photon_imessage, '_client', mock_client(boom)):
+            with self.assertRaises(photon_imessage.PhotonImessageError) as e: run(photon_imessage.send_imessage('x' * 30, 'k'))
+        self.assertIn('ConnectError', str(e.exception))
+        self.assertFalse(e.exception.uncertain)
+        def slow(req): raise httpx.ReadTimeout('slow')
+        with patch.dict(os.environ, ENV, clear=True), patch.object(photon_imessage, '_client', mock_client(slow)):
+            with self.assertRaises(photon_imessage.PhotonImessageError) as e: run(photon_imessage.send_imessage('x' * 30, 'k'))
+        self.assertTrue(e.exception.uncertain)
+
     def test_console_sends_once(self):
         text = langplan.catalogue()['templates']['en'].replace('{area}', 'Glendale city')
         body = {'request_id': 'req-imsg-0001', 'geoid': '0630000', 'reviewer': 'Op', 'reviewed': True, 'texts': {'en': text}}
