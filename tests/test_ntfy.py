@@ -40,6 +40,40 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual((c['provider'], c['channel'], c['configured']), ('ntfy', 'notification', True))
 
 
+STRATEGY_TOPIC = 'https://ntfy.sh/pharos-strategy-q4w8z2'
+
+
+class TwoTopicTests(unittest.TestCase):
+    def post_to(self, key, env):
+        seen = {}
+        def h(req):
+            seen['url'] = str(req.url)
+            return httpx.Response(200, json={'id': 'abc123456789'})
+        with patch.dict(os.environ, env, clear=True), patch.object(ntfy, '_client', mock_client(h)):
+            run(ntfy.send_ntfy('EXERCISE ONLY — text long enough here', key))
+        return seen['url']
+
+    def test_language_and_strategy_go_to_their_own_topics(self):
+        env = {**ENV, 'NTFY_STRATEGY_TOPIC_URL': STRATEGY_TOPIC}
+        self.assertEqual(self.post_to('pharos-sms-req1-hy', env), TOPIC)
+        self.assertEqual(self.post_to('pharos-sms-req1-en', env), TOPIC)
+        self.assertEqual(self.post_to('pharos-sms-req1-strategy', env), STRATEGY_TOPIC)
+        self.assertEqual(self.post_to('pharos-sms-req1-strategy', {**env, 'NTFY_STRATEGY_TOPIC_URL': STRATEGY_TOPIC + '/'}), STRATEGY_TOPIC)
+
+    def test_strategy_falls_back_to_the_language_topic(self):
+        self.assertEqual(self.post_to('pharos-sms-req1-strategy', ENV), TOPIC)
+
+    def test_config_reports_the_second_topic(self):
+        with patch.dict(os.environ, ENV, clear=True):
+            self.assertFalse(delivery_config()['strategy_topic'])
+        with patch.dict(os.environ, {**ENV, 'NTFY_STRATEGY_TOPIC_URL': STRATEGY_TOPIC}, clear=True):
+            c = delivery_config()
+        self.assertEqual((c['configured'], c['strategy_topic']), (True, True))
+        with patch.dict(os.environ, {**ENV, 'NTFY_STRATEGY_TOPIC_URL': 'http://bad/x y'}, clear=True):
+            c = delivery_config()
+        self.assertEqual((c['configured'], c['invalid'], c['strategy_topic']), (False, ['NTFY_STRATEGY_TOPIC_URL'], False))
+
+
 class AdapterTests(unittest.TestCase):
     def test_publishes_utf8_body_with_ascii_title(self):
         seen = {}

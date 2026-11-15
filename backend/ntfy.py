@@ -19,10 +19,22 @@ def _topic_ok(url):
     return p.scheme == 'https' and bool(p.netloc) and bool(re.fullmatch(r'/[A-Za-z0-9_-]{1,64}', p.path)) and not p.query and not p.params and not p.username
 
 
+def _env_url(name):
+    return (os.getenv(name) or '').strip()
+
+
 def ntfy_config():
     missing = [] if os.getenv('NTFY_TOPIC_URL') else ['NTFY_TOPIC_URL']
-    invalid = ['NTFY_TOPIC_URL'] if os.getenv('NTFY_TOPIC_URL') and not _topic_ok(os.environ['NTFY_TOPIC_URL']) else []
-    return dict(provider='ntfy', channel='notification', configured=not missing and not invalid, missing=missing, invalid=invalid)
+    invalid = [n for n in ('NTFY_TOPIC_URL', 'NTFY_STRATEGY_TOPIC_URL') if os.getenv(n) and not _topic_ok(os.environ[n])]
+    return dict(provider='ntfy', channel='notification', configured=not missing and not invalid, missing=missing, invalid=invalid,
+                strategy_topic=bool(os.getenv('NTFY_STRATEGY_TOPIC_URL')) and 'NTFY_STRATEGY_TOPIC_URL' not in invalid)
+
+
+def _topic_for(key):
+    """Strategy texts go to NTFY_STRATEGY_TOPIC_URL when it is set; everything else (language messages) to NTFY_TOPIC_URL."""
+    if key.rsplit('-', 1)[-1] == 'strategy' and _env_url('NTFY_STRATEGY_TOPIC_URL'):
+        return _env_url('NTFY_STRATEGY_TOPIC_URL').rstrip('/')
+    return _env_url('NTFY_TOPIC_URL').rstrip('/')
 
 
 def _title(key):
@@ -38,13 +50,13 @@ def _client():
 
 async def send_ntfy(text, key):
     if not ntfy_config()['configured']:
-        raise NtfyError('ntfy is not configured. Set NTFY_TOPIC_URL (an https topic URL) on the server.')
+        raise NtfyError('ntfy is not configured. Set NTFY_TOPIC_URL (and optionally NTFY_STRATEGY_TOPIC_URL) to https topic URLs on the server.')
     if len(text) > MAX_BODY:
         raise NtfyError('Message is too long for one ntfy notification.')
     headers = {'Title': _title(key), 'Tags': 'test_tube', 'Priority': '3', 'Content-Type': 'text/plain; charset=utf-8'}
     try:
         async with _client() as c:
-            r = await c.post(os.environ['NTFY_TOPIC_URL'].strip().rstrip('/'), content=text.encode('utf-8'), headers=headers)
+            r = await c.post(_topic_for(key), content=text.encode('utf-8'), headers=headers)
     except httpx.HTTPError as e:
         raise NtfyError(f'ntfy request failed ({type(e).__name__}). Check the topic before retrying.', not isinstance(e, (httpx.ConnectError, httpx.ConnectTimeout))) from None
     if not r.is_success:

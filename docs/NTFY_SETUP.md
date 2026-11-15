@@ -14,3 +14,6 @@ What gets published: with this provider the Console Send button and `scripts/sen
 **Security:** a topic on the public ntfy.sh has no login. Anyone who guesses the name can read the drill messages and publish fake ones. Use a long random topic name (not `PHAROS_LANG`) or an access token, and keep the topic out of the repo.
 
 ntfy reports no device receipts, so the PHAROS result means "accepted by ntfy"; confirm on the phone.
+
+## Separate topic for the strategy text (optional)
+Set `NTFY_STRATEGY_TOPIC_URL` (same format, for example `https://ntfy.sh/<another-long-random-topic>`) and the evacuation-strategy text is published there, while the translated language messages stay on `NTFY_TOPIC_URL`. If it is not set, strategy texts use `NTFY_TOPIC_URL`. Subscribe the app to each topic you want to watch. `/api/health` shows `strategy_topic: true` when the second topic is active.
