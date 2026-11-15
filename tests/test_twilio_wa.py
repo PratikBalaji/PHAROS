@@ -74,6 +74,25 @@ class AdapterTests(unittest.TestCase):
             with self.assertRaises(twilio_wa.TwilioError): run(twilio_wa.refresh_twilio('bad'))
 
 
+class SmsModeTests(unittest.TestCase):
+    def test_sms_mode_uses_plain_numbers_and_twilio_from(self):
+        env = {'TWILIO_ACCOUNT_SID': SID, 'TWILIO_AUTH_TOKEN': 'tok', 'TWILIO_FROM': '+17372583742', 'TWILIO_TO': '+13464468717', 'PHAROS_DELIVERY_PROVIDER': 'twilio_sms'}
+        seen = {}
+        def h(req):
+            seen['body'] = req.content.decode()
+            return httpx.Response(201, json={'sid': MSG, 'status': 'queued'})
+        with patch.dict(os.environ, env, clear=True), patch.object(twilio_wa, '_client', mock_client(h)):
+            c = delivery_config()
+            r = run(twilio_wa.send_twilio('EXERCISE ONLY test message here', 'k'))
+        self.assertEqual((c['provider'], c['channel'], c['configured']), ('twilio_sms', 'sms', True))
+        self.assertIn('From=%2B17372583742', seen['body'])
+        self.assertNotIn('whatsapp', seen['body'])
+        self.assertEqual(r['provider'], 'twilio_sms')
+        self.assertIn('SMS', r['status'])
+        with patch.dict(os.environ, {**env, 'TWILIO_FROM': ''}, clear=True):
+            self.assertIn('TWILIO_FROM', delivery_config()['missing'])
+
+
 class ConsoleTests(unittest.TestCase):
     def test_console_sends_through_twilio_once_and_status_routes_by_id(self):
         text = langplan.catalogue()['templates']['en'].replace('{area}', 'Glendale city')
