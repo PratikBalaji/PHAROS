@@ -20,6 +20,7 @@ from . import gemini, langplan
 from .photon import delivery_config, send_photon, refresh_photon, PhotonError
 from .twilio_wa import send_twilio, refresh_twilio
 from .resend_email import send_resend, refresh_resend
+from .photon_imessage import send_imessage
 from uuid import uuid4
 from .live import (
     LiveDataError, fetch_weather, fetch_firms, fetch_routes, fetch_camera_detections,
@@ -108,7 +109,7 @@ async def send(draft_id: str,body: DraftRequest):
             if not e.uncertain: d['sending']=False;save(d)
             audit('Photon delivery uncertain; automatic resend blocked' if e.uncertain else 'Photon request rejected; no delivery recorded',draft_id)
             raise HTTPException(502,str(e)) from None
-    elif channel['provider'] in ('twilio_whatsapp','twilio_sms','resend_email'):
+    elif channel['provider'] in ('twilio_whatsapp','twilio_sms','resend_email','photon_imessage'):
         d['sending']=False;save(d);raise HTTPException(409,'Console-only delivery is available from the Console, not this draft route')
     elif channel['provider']=='ntfy':
         parsed=urlparse(topic)
@@ -192,8 +193,10 @@ def sms_result(code,row):
     state=row[0]
     return {'code':code,'state':state,'status':'Delivery status uncertain; inspect Photon before retrying' if state=='sending' else row[1],'message_id':receipt.get('message_id'),'provider_status':receipt.get('provider_status')}
 
-PACING={'twilio_whatsapp':3.2,'twilio_sms':3.2,'resend_email':0.6}  # seconds between sends
-SENDERS={'photon':send_photon,'twilio_whatsapp':send_twilio,'twilio_sms':send_twilio,'resend_email':send_resend}
+PACING={'twilio_whatsapp':3.2,'twilio_sms':3.2,'resend_email':0.6,'photon_imessage':1.0}  # seconds between sends
+def sender_for(provider):
+    # looked up at call time so tests and hot-swaps see the current function
+    return {'photon':send_photon,'twilio_whatsapp':send_twilio,'twilio_sms':send_twilio,'resend_email':send_resend,'photon_imessage':send_imessage}.get(provider)
 
 async def deliver_texts(request_id,texts,channel):
     # One idempotent send per (request_id, key). A key is a language code, or 'strategy'.
@@ -206,9 +209,9 @@ async def deliver_texts(request_id,texts,channel):
                 if not row: db.execute('INSERT INTO sms_sends (request_id,code,state) VALUES (?,?,?)',(request_id,code,'sending'))
         if row: results.append({**sms_result(code,row),'duplicate':True}); continue
         receipt=None
-        if channel['provider'] in SENDERS:
+        if sender_for(channel['provider']):
             try:
-                receipt=await (send_photon if channel['provider']=='photon' else send_resend if channel['provider']=='resend_email' else send_twilio)(text,f'pharos-sms-{request_id}-{code}')
+                receipt=await sender_for(channel['provider'])(text,f'pharos-sms-{request_id}-{code}')
                 state,status='submitted',receipt['status']
             except PhotonError as e:
                 if e.uncertain: state,status='uncertain',f'Delivery status uncertain; automatic resend blocked. Reason: {e}'
@@ -234,7 +237,7 @@ async def console_send_sms(body: ConsoleSms):
             raise HTTPException(400,'Each message must keep its exercise marker and name the district')
     channel=delivery_config()
     if not channel['configured']: raise HTTPException(503,'Delivery is not configured. Check the Integrations panel for missing server settings.')
-    if channel['provider'] not in ('photon','twilio_whatsapp','twilio_sms','resend_email','inbox'): raise HTTPException(409,'Console messages require the photon, twilio_whatsapp, twilio_sms, resend_email or inbox delivery provider')
+    if channel['provider'] not in ('photon','photon_imessage','twilio_whatsapp','twilio_sms','resend_email','inbox'): raise HTTPException(409,'Console messages require the photon, photon_imessage, twilio_whatsapp, twilio_sms, resend_email or inbox delivery provider')
     results=await deliver_texts(body.request_id,body.texts,channel)
     counts={k:sum(1 for r in results if r['state']==k) for k in ('submitted','recorded','uncertain','rejected','sending')}
     audit(f"EXERCISE SMS {body.request_id} for {props['name']}: {len(results)} language(s), {counts['submitted']} submitted, {counts['recorded']} recorded, {counts['uncertain']+counts['sending']} uncertain, {counts['rejected']} rejected; reviewed by {body.reviewer.strip()}")
@@ -279,7 +282,7 @@ async def console_strategy_sms(body: StrategySms):
     if not langplan.strategy_valid(body.text,props['name'],facts): raise HTTPException(400,'Strategy text must keep the exercise marker, the district name and the planner facts')
     channel=delivery_config()
     if not channel['configured']: raise HTTPException(503,'Delivery is not configured. Check the Integrations panel for missing server settings.')
-    if channel['provider'] not in ('photon','twilio_whatsapp','twilio_sms','resend_email','inbox'): raise HTTPException(409,'Console messages require the photon, twilio_whatsapp, twilio_sms, resend_email or inbox delivery provider')
+    if channel['provider'] not in ('photon','photon_imessage','twilio_whatsapp','twilio_sms','resend_email','inbox'): raise HTTPException(409,'Console messages require the photon, photon_imessage, twilio_whatsapp, twilio_sms, resend_email or inbox delivery provider')
     results=await deliver_texts(body.request_id,{'strategy':body.text},channel)
     r=results[0]
     audit(f"EXERCISE STRATEGY SMS {body.request_id} for {props['name']} ({facts['outcome']}): {r['state']}; reviewed by {body.reviewer.strip()}")
