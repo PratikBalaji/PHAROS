@@ -75,3 +75,6 @@ node scripts/send_exercise_sms.mjs --facts facts.json --send --reviewer "Your Na
 ```
 
 `POST /api/console/strategy-plan` drafts the strategy text from facts only; `POST /api/console/strategy-sms` sends the reviewed text (named reviewer, exercise marker, district name and planner facts must survive). `GET /api/console/sms-status?ids=...` refreshes Photon receipts without server storage. Withheld runs never name a route.
+
+## Fallback: Mac iMessage sidecar
+If Photon's hosted SMS refuses sends (for example HTTP 409), run the sidecar on a Mac signed into Messages. Step-by-step directions: `sidecar/photon/README.md`. The same sender script delivers to it with `--sidecar`.
