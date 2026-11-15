@@ -6,8 +6,8 @@ An MCP server that reviews wildfire evidence, selects real municipalities and di
 
 - **Communications console (primary view)** — pick real municipalities and districts from a recipients rail, compose an exercise alert, and record a broadcast to a sent-alert log. The console is vanilla JS over a committed dataset of real boundaries, so it works offline.
 - **Demographic-driven multilingual drafting** — each selected district's recommended languages come from US Census ACS "language spoken at home" data; an operator can switch the alert among supported languages (English, Spanish, Chinese, Korean, Tagalog, Vietnamese, Armenian, Arabic, Russian). Non-English text is rendered from human-authored templates and flagged for native-speaker review.
-- **Immersive 3D Map view** — a pitched MapLibre scene with open 3D terrain (AWS elevation tiles), extruded buildings, and sky, showing real NIFC/WFIGS fire perimeters and the district boundaries you are targeting. It renders a **predictive evacuation route**: a wind-driven cellular-automaton fire projection (animated by a time slider) and a **real road route that reroutes around the projected burn** — or is **withheld** when every path is cut off. An offline schematic remains available if the basemap cannot load.
-- Routing uses OpenRouteService `avoid_polygons` when `ORS_API_KEY` is set, otherwise a keyless OSRM fallback that rejects any candidate crossing the projected fire. The fire model and routes are **simplified exercise decision-support — not operational fire prediction or authoritative navigation**.
+- **Immersive 3D Map view** — a pitched MapLibre scene with open 3D terrain (AWS elevation tiles), extruded buildings, and sky, showing real NIFC/WFIGS fire perimeters and the district boundaries you are targeting. **Live Explorer** runs one of **8 mock fire runs**: pick a run, press Play, and watch a wind-driven cellular-automaton fire grow while a vehicle drives a real OSRM road route that **keeps changing** (new road, new assembly point, or **withheld** when every path is cut off). The route is colored cyan to amber to red by distance from the fire, alternatives are gray with ETAs, and blocked stretches are red dashed. An offline schematic remains available if the basemap cannot load.
+- Routing uses OpenRouteService `avoid_polygons` when `ORS_API_KEY` is set, otherwise a keyless OSRM fallback that rejects any candidate crossing the projected fire. When no backend is reachable the browser calls the public OSRM server directly (it allows cross-origin requests), so Live Explorer still works on a static deploy. Replans are throttled and cached to stay within the public demo server's fair-use limits; for sustained use set `OSRM_URL` to your own instance. The fire model and routes are **simplified exercise decision-support — not operational fire prediction or authoritative navigation**.
 - Deterministic segment/circle intersection checks for the replay scenario; named approval, automatic draft invalidation on replay changes, browser-local activity, and JSON export.
 - Python FastAPI backend serves the dashboard, stores drafts/approvals/audit in SQLite, records exercise broadcasts, and supports Bedrock Converse tool use, Photon SMS and optional ntfy delivery.
 - A standalone read-only MCP server any agent can call for retrieval. It exposes four synthetic scenario tools plus **eight** live retrieval tools (satellite, weather, routing, camera, fire-weather alerts, fire perimeters, place boundaries, language demographics) and runs over stdio (local agents) or token-authenticated Streamable HTTP (remote agents). The Bedrock runner invokes the same service functions via Converse tool schemas; it does **not** currently connect to that server over MCP transport.
@@ -166,8 +166,10 @@ backend/   FastAPI app (app.py), scenario facts and routing checks (core.py),
 dist/      Static dashboard: vanilla JS (app.js, core.js, geospatial.js, i18n.js),
            CSS, vendored MapLibre GL JS, data/districts.json (curated recipients),
            and presentation/ (five-minute browser deck)
-dist/      ... plus firemodel.js (predictive cellular-automaton fire model)
-scripts/   build_districts.py — rebuilds dist/data/districts.json from TIGERweb + ACS
+dist/      ... plus firemodel.js (wind-driven cellular fire model), fireruns.js (8 mock runs),
+           routeanim.js (pure route/hazard geometry), liveplan.js (which assembly point, keep or replace a route)
+scripts/   build_districts.py — rebuilds dist/data/districts.json from TIGERweb + ACS;
+           simulate_runs.mjs — headless replay of the fire runs against live OSRM
 api/       index.py — thin Vercel serverless API (evac-route, perimeters, weather)
 docs/      PRESENTATION.md — presentation setup, deployment, and demo cues
 tests/     Node (geometry, map overlays, i18n, fire model, presentation) and Python (backend, live, sources, evac, mcp, Bedrock) tests
@@ -211,3 +213,25 @@ The replay also updates the offline schematic, so it remains demonstrable when e
 The original vision is not fully implemented. Read [PLAN_AUDIT.md](docs/PLAN_AUDIT.md), [API_KEYS.md](docs/API_KEYS.md), and [CODEBASE_INDEX.md](docs/CODEBASE_INDEX.md) before configuring providers or making performance claims.
 
 The console now builds a **complete per-district language bundle** automatically. Select districts, choose Automatic per district or All 9 supported languages, review the plan and record one batch. Preview tabs do not affect the batch. The backend constructs and stores every localized message from canonical templates. Unsupported/grouped languages and illustrative demographics are disclosed. These are fixed exercise templates, not model translations or real notification delivery.
+
+### Live Explorer: mock fire runs
+
+Open **Map → Live explorer** and choose one of eight fictional runs (Verdugo Hills, Arroyo Seco, Altadena Ridge, Sierra Madre Canyon, Flintridge Crest, Santa Anita Wash, Monrovia Canyon, Wind-Shift Run). They are set in the real foothill geography but are not forecasts and do not represent any real incident. Each run is 24 five-minute steps. Press **Play** (1×, 2× or 4×).
+
+- The vehicle starts in the run's district and heads for a primary assembly point. When the fire cuts the road ahead, or closes in on it, the planner asks OSRM again from the vehicle's current position. It tries the primary assembly point first, then the nearest safe ones, and reports whether the route is **clear**, **rerouted** (with the minutes and kilometres it changed by) or **withheld**.
+- The hazard used for routing is the burned area plus a one-cell margin, not a convex hull, so a wind shift does not make the hazard wildly larger than the fire.
+- The **Wind-Shift Run** reverses the wind at T+55, so the fire turns back on itself. **Verdugo Hills** is deliberately a no-safe-exit run: the fire cuts both roads out early, so the route is withheld with the reason shown.
+- Routes are planned against the fire **as projected 15 minutes ahead**, drawn as a dashed outline, so the vehicle is switched away from a road before it is cut. A "fire nearby" check only recolors the route; it is replaced only when the projected fire would block it.
+- Toggle **Alternatives** and **Follow vehicle** in the status card. The vehicle's speed is illustrative.
+
+The fire model and routes are simplified exercise decision support, not operational fire prediction or navigation.
+
+To see what the planner does without a browser, replay the runs headlessly against live OSRM. It uses the same decision code as the app (`dist/liveplan.js`) and prints reroutes, assembly-point switches, withheld periods and whether the vehicle arrives:
+
+```sh
+NODE_USE_ENV_PROXY=1 node scripts/simulate_runs.mjs              # all eight runs
+node scripts/simulate_runs.mjs altadena windshift                # chosen runs
+OSRM_BASE=https://your-osrm.example node scripts/simulate_runs.mjs
+```
+
+`NODE_USE_ENV_PROXY=1` is only needed behind an HTTP proxy. The script pauses between requests to stay within the public demo server's fair-use limits.
