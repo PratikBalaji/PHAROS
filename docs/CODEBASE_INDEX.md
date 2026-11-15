@@ -12,7 +12,6 @@
 | `dist/geospatial.js` | MapLibre basemap, live layers, replay geometry synchronization |
 | `dist/core.js` | Deterministic scenario facts, route checks and template drafts |
 | `dist/firemodel.js` | Simplified cellular fire-projection exercise |
-| `dist/presentation/` | Embedded live-app presentation, controls, script and timing |
 | `worker/index.js` | Published Worker request dispatcher and embedded static assets |
 | `worker/api.js` | Deployed API: R2 draft/review/inbox, localized bundles, audit and selected data adapters |
 | `worker/routing.js` | OSRM alternatives checked against a supplied polygon |

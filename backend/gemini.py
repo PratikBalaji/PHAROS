@@ -14,6 +14,7 @@ import httpx
 GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
 DEFAULT_MODEL = 'gemini-3.5-flash-lite'
 MAX_BODY = 700
+MAX_DRAFT = 420
 MAX_RATIONALE = 320
 
 
@@ -130,3 +131,46 @@ async def polish_strategy(facts, draft):
     if not 20 <= len(text) <= MAX_BODY:
         raise GeminiError('Gemini strategy text had an unusable length')
     return text
+
+
+DRAFT_SYSTEM = (
+    'You write short public-safety notifications for a wildfire evacuation EXERCISE (a drill) that residents of one district '
+    'will read on their phone. Write each requested language natively, in its own script, in calm plain words at about a 6th-grade '
+    'reading level, 2 to 3 sentences. Each version must (1) name the place exactly as given, (2) say clearly that this is a drill '
+    'or exercise and NOT a real emergency or evacuation order, and (3) tell people that in a real event they should follow the '
+    'official instructions of their local emergency authority. The versions must carry the same meaning but may be worded naturally '
+    'for each language, not word-for-word. Never invent or mention routes, roads, shelters, assembly points, times, phone numbers, '
+    'links or instructions to leave. Do not add any "EXERCISE ONLY" style prefix; the system adds it. One item per requested code.'
+)
+
+
+def _draft_ok(text, area):
+    low = text.lower()
+    return (20 <= len(text) <= MAX_DRAFT and area.lower() in low and 'http' not in low and 'www.' not in low
+            and '@' not in text and not any(ch.isdigit() for ch in text))
+
+
+async def draft_messages(area, targets, context=None):
+    """Gemini writes the exercise message in each language itself (not a translation of a fixed sentence).
+    targets: {code: language name}. Returns {code: body}; raises GeminiError if any requested language is unusable."""
+    facts = {'place_name': area, 'languages': targets}
+    if context:
+        facts['scenario_context'] = ' '.join(str(context).split())[:200]
+    result = await _generate(DRAFT_SYSTEM, json.dumps(facts, ensure_ascii=False), {
+        'type': 'OBJECT',
+        'properties': {'messages': {'type': 'ARRAY', 'items': {
+            'type': 'OBJECT', 'properties': {'code': {'type': 'STRING'}, 'text': {'type': 'STRING'}}, 'required': ['code', 'text']}}},
+        'required': ['messages'],
+    })
+    out = {}
+    for item in result.get('messages') or []:
+        code = item.get('code') if isinstance(item, dict) else None
+        text = item.get('text') if isinstance(item, dict) else None
+        if code in targets and code not in out and isinstance(text, str):
+            text = ' '.join(text.split())
+            if _draft_ok(text, area):
+                out[code] = text
+    missing = [c for c in targets if c not in out]
+    if missing:
+        raise GeminiError('Gemini draft missing or invalid for: ' + ', '.join(missing))
+    return out

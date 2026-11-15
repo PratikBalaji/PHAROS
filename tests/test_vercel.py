@@ -13,9 +13,9 @@ class VercelEntrypoints(unittest.TestCase):
         # crashed on Vercel (FUNCTION_INVOCATION_FAILED on every /api call) while this service stayed healthy.
         self.assertEqual(config['services'],{'app':{'root':'.','framework':'fastapi'}})
         self.assertEqual([r['destination']['service'] for r in config['rewrites']],['app'])
-    def test_root_serves_app_and_presentation(self):
+    def test_root_serves_app(self):
         client=TestClient(root_app)
-        for path in ['/','/presentation/','/app.js']:
+        for path in ['/','/app.js']:
             self.assertEqual(client.get(path).status_code,200,path)
     def test_root_service_also_serves_every_api_route(self):
         client=TestClient(root_app)

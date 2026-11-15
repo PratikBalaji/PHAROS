@@ -86,29 +86,30 @@ async def resolve_language_plan(geoid):
                 'rationale': 'Rule: English plus supported languages ranked by population-weighted share.'}
 
 
-async def resolve_translations(geoid, languages):
+async def resolve_translations(geoid, languages, context=None):
+    """Gemini drafts the exercise message natively in every requested language (English included).
+    The server adds the fixed per-language exercise marker. Fixed templates are only a labeled fallback."""
     cat = catalogue()
     meta = {l['code']: l for l in cat['languages']}
     languages = [c for c in dict.fromkeys(['en', *languages]) if c in meta]
     area = district(geoid)['name']
-    messages = {'en': {'text': cat['templates']['en'].replace('{area}', area), 'reviewed': True, 'rtl': False, 'source': 'template'}}
-    targets = {c: meta[c]['label'] for c in languages if c != 'en'}
-    translated, reason = {}, None
-    if targets:
-        try:
-            translated = await gemini.translate_message(english_sentence(area, cat), area, targets)
-        except gemini.GeminiError as exc:
-            reason = str(exc)
-    for code in targets:
-        if code in translated:
-            messages[code] = {'text': f"{marker(code, cat)} {translated[code]}", 'reviewed': False,
+    targets = {c: meta[c]['label'] for c in languages}
+    drafted, reason = {}, None
+    try:
+        drafted = await gemini.draft_messages(area, targets, context)
+    except gemini.GeminiError as exc:
+        reason = str(exc)
+    messages = {}
+    for code in languages:
+        if code in drafted:
+            messages[code] = {'text': f"{marker(code, cat)} {drafted[code]}", 'reviewed': False,
                               'rtl': bool(meta[code].get('rtl')), 'source': 'gemini'}
         else:
             messages[code] = {'text': cat['templates'][code].replace('{area}', area), 'reviewed': bool(meta[code]['reviewed']),
                               'rtl': bool(meta[code].get('rtl')), 'source': 'template'}
     used_ai = any(m['source'] == 'gemini' for m in messages.values())
     return {'geoid': geoid, 'name': area, 'languages': languages, 'messages': messages,
-            'engine': ('Gemini · ' + gemini.model_id()) if used_ai else 'Fixed templates',
+            'engine': ('Gemini · ' + gemini.model_id()) if used_ai else 'Fixed templates (Gemini unavailable)',
             'fallback_reason': reason, 'requires_language_review': any(not m['reviewed'] for m in messages.values())}
 
 
