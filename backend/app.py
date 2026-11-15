@@ -194,7 +194,8 @@ def sms_result(code,row):
 async def deliver_texts(request_id,texts,channel):
     # One idempotent send per (request_id, key). A key is a language code, or 'strategy'.
     results=[]
-    for code,text in texts.items():
+    for n,(code,text) in enumerate(texts.items()):
+        if n and channel['provider'] in ('twilio_whatsapp','twilio_sms'): await asyncio.sleep(3.2)  # WhatsApp sandbox allows one message per 3 s
         with LOCK:
             with sqlite3.connect(DB_PATH) as db:
                 row=db.execute('SELECT state,status,receipt FROM sms_sends WHERE request_id=? AND code=?',(request_id,code)).fetchone()
