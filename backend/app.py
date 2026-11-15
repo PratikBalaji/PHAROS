@@ -18,6 +18,7 @@ from .core import create_draft, tool_result, check_routes
 from .broadcast import build_plan
 from . import gemini, langplan
 from .photon import delivery_config, send_photon, refresh_photon, PhotonError
+from .twilio_wa import send_twilio, refresh_twilio
 from uuid import uuid4
 from .live import (
     LiveDataError, fetch_weather, fetch_firms, fetch_routes, fetch_camera_detections,
@@ -106,6 +107,8 @@ async def send(draft_id: str,body: DraftRequest):
             if not e.uncertain: d['sending']=False;save(d)
             audit('Photon delivery uncertain; automatic resend blocked' if e.uncertain else 'Photon request rejected; no delivery recorded',draft_id)
             raise HTTPException(502,str(e)) from None
+    elif channel['provider']=='twilio_whatsapp':
+        d['sending']=False;save(d);raise HTTPException(409,'WhatsApp delivery is available from the Console, not this draft route')
     elif channel['provider']=='ntfy':
         parsed=urlparse(topic)
         if parsed.scheme!='https' or not parsed.netloc:
@@ -198,9 +201,9 @@ async def deliver_texts(request_id,texts,channel):
                 if not row: db.execute('INSERT INTO sms_sends (request_id,code,state) VALUES (?,?,?)',(request_id,code,'sending'))
         if row: results.append({**sms_result(code,row),'duplicate':True}); continue
         receipt=None
-        if channel['provider']=='photon':
+        if channel['provider'] in ('photon','twilio_whatsapp'):
             try:
-                receipt=await send_photon(text,f'pharos-sms-{request_id}-{code}')
+                receipt=await (send_photon if channel['provider']=='photon' else send_twilio)(text,f'pharos-sms-{request_id}-{code}')
                 state,status='submitted',receipt['status']
             except PhotonError as e:
                 if e.uncertain: state,status='uncertain',f'Delivery status uncertain; automatic resend blocked. Reason: {e}'
@@ -226,7 +229,7 @@ async def console_send_sms(body: ConsoleSms):
             raise HTTPException(400,'Each message must keep its exercise marker and name the district')
     channel=delivery_config()
     if not channel['configured']: raise HTTPException(503,'Delivery is not configured. Check the Integrations panel for missing server settings.')
-    if channel['provider'] not in ('photon','inbox'): raise HTTPException(409,'Console SMS requires the photon or inbox delivery provider')
+    if channel['provider'] not in ('photon','twilio_whatsapp','inbox'): raise HTTPException(409,'Console messages require the photon, twilio_whatsapp or inbox delivery provider')
     results=await deliver_texts(body.request_id,body.texts,channel)
     counts={k:sum(1 for r in results if r['state']==k) for k in ('submitted','recorded','uncertain','rejected','sending')}
     audit(f"EXERCISE SMS {body.request_id} for {props['name']}: {len(results)} language(s), {counts['submitted']} submitted, {counts['recorded']} recorded, {counts['uncertain']+counts['sending']} uncertain, {counts['rejected']} rejected; reviewed by {body.reviewer.strip()}")
@@ -271,7 +274,7 @@ async def console_strategy_sms(body: StrategySms):
     if not langplan.strategy_valid(body.text,props['name'],facts): raise HTTPException(400,'Strategy text must keep the exercise marker, the district name and the planner facts')
     channel=delivery_config()
     if not channel['configured']: raise HTTPException(503,'Delivery is not configured. Check the Integrations panel for missing server settings.')
-    if channel['provider'] not in ('photon','inbox'): raise HTTPException(409,'Console SMS requires the photon or inbox delivery provider')
+    if channel['provider'] not in ('photon','twilio_whatsapp','inbox'): raise HTTPException(409,'Console messages require the photon, twilio_whatsapp or inbox delivery provider')
     results=await deliver_texts(body.request_id,{'strategy':body.text},channel)
     r=results[0]
     audit(f"EXERCISE STRATEGY SMS {body.request_id} for {props['name']} ({facts['outcome']}): {r['state']}; reviewed by {body.reviewer.strip()}")
@@ -283,7 +286,7 @@ async def console_sms_status(ids: str=Query(min_length=1,max_length=2000)):
     out=[]
     for mid in list(dict.fromkeys(i.strip() for i in ids.split(',') if i.strip()))[:40]:
         try:
-            r=await refresh_photon({'project_id':os.environ.get('PHOTON_PROJECT_ID'),'message_id':mid})
+            r=await refresh_twilio(mid) if mid[:2] in ('SM','MM') else await refresh_photon({'project_id':os.environ.get('PHOTON_PROJECT_ID'),'message_id':mid})
             out.append({'message_id':mid,'provider_status':r['provider_status'],'status':r['status']})
         except PhotonError as e: out.append({'message_id':mid,'error':str(e)})
     return {'receipts':out}

@@ -17,6 +17,9 @@ def photon_config():
 def delivery_config():
     provider = os.getenv('PHAROS_DELIVERY_PROVIDER') or ('photon' if any(os.getenv(k) for k in FIELDS) else 'ntfy' if os.getenv('NTFY_TOPIC_URL') else 'inbox')
     if provider == 'photon': return photon_config()
+    if provider == 'twilio_whatsapp':
+        from .twilio_wa import twilio_config
+        return twilio_config()
     return dict(provider=provider, configured=provider=='inbox' or (provider=='ntfy' and bool(os.getenv('NTFY_TOPIC_URL'))), missing=[], invalid=[] if provider in ['inbox','ntfy'] else ['PHAROS_DELIVERY_PROVIDER'])
 
 class PhotonError(Exception):
