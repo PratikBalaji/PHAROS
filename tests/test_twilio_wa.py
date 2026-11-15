@@ -41,7 +41,7 @@ class AdapterTests(unittest.TestCase):
     def test_send_builds_whatsapp_form_and_parses_receipt(self):
         seen = {}
         def h(req):
-            seen['body'] = req.content.decode(); seen['url'] = str(req.url); seen['idem'] = req.headers.get('I-Twilio-Idempotency-Token')
+            seen['body'] = req.content.decode(); seen['url'] = str(req.url); seen['idem'] = req.headers.get('I-Twilio-Idempotency-Token')  # must not be sent
             return httpx.Response(201, json={'sid': MSG, 'status': 'queued'})
         with patch.dict(os.environ, ENV, clear=True), patch.object(twilio_wa, '_client', mock_client(h)):
             r = run(twilio_wa.send_twilio('EXERCISE ONLY test message here', 'key-1'))
@@ -49,7 +49,7 @@ class AdapterTests(unittest.TestCase):
         self.assertIn('From=whatsapp%3A%2B14155238886', seen['body'])
         self.assertIn('To=whatsapp%3A%2B15555550123', seen['body'])
         self.assertTrue(seen['url'].endswith(f'/Accounts/{SID}/Messages.json'))
-        self.assertEqual(seen['idem'], 'key-1')
+        self.assertIsNone(seen['idem'])
 
     def test_server_error_is_uncertain_client_error_is_not(self):
         with patch.dict(os.environ, ENV, clear=True):
