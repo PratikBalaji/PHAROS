@@ -19,10 +19,6 @@ An MCP server that reviews wildfire evidence, selects real municipalities and di
 - A standalone read-only MCP server any agent can call for retrieval. It exposes four synthetic scenario tools plus **eight** live retrieval tools (satellite, weather, routing, camera, fire-weather alerts, fire perimeters, place boundaries, language demographics) and runs over stdio (local agents) or token-authenticated Streamable HTTP (remote agents). The Bedrock runner invokes the same service functions via Converse tool schemas; it does **not** currently connect to that server over MCP transport.
 - Open-data adapters (some require keys) — NASA FIRMS (satellite), Open-Meteo (weather), OSRM (routing), NWS `api.weather.gov` (fire-weather alerts), NIFC/WFIGS (fire perimeters), US Census TIGERweb (boundaries) — plus US Census ACS (language demographics, free key) and an AI-camera detection ingest adapter. Reachable as REST endpoints (see `/docs`) and through the MCP tools. When a source is unconfigured or unreachable, the tools return a clearly labeled synthetic fallback rather than fabricated live data.
 
-## Five-minute live presentation
-
-Open `/presentation/` on the dashboard deployment. The six-slide browser deck embeds this actual application, includes speaker notes and a rehearsal timer, and uses a 4:50 running order with a 10-second buffer. The embedded exercise is isolated from your normal browser workspace. Setup, Vercel deployment instructions, and demo cues are in [docs/PRESENTATION.md](docs/PRESENTATION.md).
-
 ## Run the full local app
 
 Install Python 3.11+ and run:
