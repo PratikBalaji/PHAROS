@@ -8,6 +8,7 @@
 //   node scripts/send_exercise_sms.mjs --facts facts.json --send --reviewer "Your Name" [verdugo ...]
 //
 // Options: --base URL (default https://www.pharos.casa)  --batch TAG (idempotency tag, default ex1)
+//          --sidecar URL  deliver through the Mac iMessage sidecar instead of Photon SMS (token in PHOTON_SIDECAR_TOKEN)
 //          --languages N (default 3 total)  --out FILE (drafts markdown)  --gap SECONDS (default 4)
 // Every text is marked EXERCISE ONLY by the server. Sends go to the single configured test number.
 // Behind a proxy: NODE_USE_ENV_PROXY=1 NODE_EXTRA_CA_CERTS=<bundle>.
@@ -22,10 +23,13 @@ const N_LANG = Number(opt('languages', 3));
 const GAP = Number(opt('gap', 4)) * 1000;
 const REVIEWER = opt('reviewer', '');
 const OUT = opt('out', 'exercise_drafts.md');
+const SIDECAR = opt('sidecar', '').replace(/\/$/, '');
+const SIDECAR_TOKEN = process.env.PHOTON_SIDECAR_TOKEN || '';
 const factsFile = opt('facts');
-const valued = new Set(['--base', '--batch', '--languages', '--gap', '--reviewer', '--out', '--facts']);
+const valued = new Set(['--sidecar', '--base', '--batch', '--languages', '--gap', '--reviewer', '--out', '--facts']);
 const only = args.filter((a, i) => !a.startsWith('--') && !valued.has(args[i - 1]));
 if (!factsFile) { console.error('Need --facts <file from simulate_runs.mjs --json>'); process.exit(2); }
+if (SEND && SIDECAR && SIDECAR_TOKEN.length < 16) { console.error('--sidecar needs PHOTON_SIDECAR_TOKEN in the environment'); process.exit(2); }
 if (SEND && !REVIEWER.trim()) { console.error('--send needs --reviewer "<name of the person who reviewed the drafts>"'); process.exit(2); }
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -63,11 +67,25 @@ console.log(`\nWrote ${OUT}: ${drafts.length} runs, ${drafts.reduce((n, d) => n 
 if (!SEND) process.exit(0);
 
 const receipts = [];
+async function sidecarSend(key, text) {
+  const res = await fetch(SIDECAR + '/send', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + SIDECAR_TOKEN }, body: JSON.stringify({ key, text }) });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok && !j.state) throw new Error(`sidecar HTTP ${res.status} ${JSON.stringify(j).slice(0, 160)}`);
+  return j;
+}
 for (const d of drafts) {
   const rid = `${BATCH}-${d.f.run}`;
-  const lang = await api('/api/console/send-sms', { request_id: rid, geoid: d.f.geoid, reviewer: REVIEWER, reviewed: true, texts: d.texts });
-  await wait(GAP);
-  const st = await api('/api/console/strategy-sms', { request_id: rid + '-strategy', geoid: d.f.geoid, reviewer: REVIEWER, reviewed: true, facts: d.facts, text: d.strat.text });
+  let lang, st;
+  if (SIDECAR) {
+    lang = { results: [], counts: { submitted: 0 } };
+    for (const c of d.codes) { const r = await sidecarSend(`${rid}-${c}`, d.texts[c]); lang.results.push({ code: c, state: r.state, message_id: null, provider_status: r.error || null, duplicate: !!r.duplicate }); if (r.state === 'sent') lang.counts.submitted++; }
+    const r = await sidecarSend(`${rid}-strategy`, d.strat.text);
+    st = { result: { state: r.state, message_id: null, provider_status: r.error || null, duplicate: !!r.duplicate } };
+  } else {
+    lang = await api('/api/console/send-sms', { request_id: rid, geoid: d.f.geoid, reviewer: REVIEWER, reviewed: true, texts: d.texts });
+    await wait(GAP);
+    st = await api('/api/console/strategy-sms', { request_id: rid + '-strategy', geoid: d.f.geoid, reviewer: REVIEWER, reviewed: true, facts: d.facts, text: d.strat.text });
+  }
   for (const r of lang.results) receipts.push({ run: d.f.run, kind: r.code, state: r.state, id: r.message_id, status: r.provider_status, dup: r.duplicate });
   receipts.push({ run: d.f.run, kind: 'strategy', state: st.result.state, id: st.result.message_id, status: st.result.provider_status, dup: st.result.duplicate });
   console.log(`sent ${d.f.run}: ${lang.counts.submitted} language + strategy ${st.result.state}`);
