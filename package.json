@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "check": "node --check dist/app.js && node --check dist/core.js && node --check dist/geospatial.js && node --check dist/presentation/deck.js && node --check dist/presentation/config.js",
+    "check": "node --check dist/app.js && node --check dist/core.js && node --check dist/geospatial.js && node --check dist/presentation/deck.js && node --check dist/presentation/config.js && node --check dist/firemodel.js && node --check dist/fireruns.js && node --check dist/routeanim.js && node --check dist/i18n.js",
     "build:sites": "node scripts/build-worker.mjs && esbuild worker/index.js --bundle --format=esm --platform=browser --outfile=dist/server/index.js"
   },
   "devDependencies": {

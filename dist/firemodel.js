@@ -46,19 +46,24 @@ function downwindVector(windDirFromDeg) {
 
 /**
  * @param {[number,number]} ignition  [lon, lat]
- * @param {{speed:number, dirFrom:number}} wind  speed (km/h), dirFrom (deg, meteorological)
- * @param {object} opts  { steps, grid, spanDeg, baseProb, windStrength, seed }
+ * @param {{speed:number, dirFrom:number}|function(number):{speed:number, dirFrom:number}} wind
+ *        a fixed wind, or a function of the step number so the wind can shift mid-run.
+ *        speed (km/h), dirFrom (deg, meteorological)
+ * @param {object} opts  { steps, grid, spanDeg, baseProb, windStrength, seed, includeStart }
  * @returns {{ frames: Array, meta: object }}
+ *
+ * Each frame has `fire` (burned cell squares to render), `hazard` (convex hull, kept for
+ * compatibility), `hazardCells` (a tight MultiPolygon of the burn plus a one-cell margin, built
+ * from row runs; use this for routing) and `wind` (the wind used for that step).
  */
 export function projectFire(ignition, wind = {}, opts = {}) {
   const steps = opts.steps ?? 6;
   const grid = opts.grid ?? 41;                 // cells per side (odd -> centered ignition)
   const spanDeg = opts.spanDeg ?? 0.09;         // total latitude span of the grid (~10 km)
   const baseProb = opts.baseProb ?? 0.22;
-  const speed = Math.max(0, Number(wind.speed) || 0);
-  const windStrength = (opts.windStrength ?? 0.12) * Math.min(speed, 60); // saturates
+  const strengthPerKmh = opts.windStrength ?? 0.12;
+  const windAt = typeof wind === 'function' ? wind : () => wind;
   const rnd = mulberry32(opts.seed ?? 1337);
-  const wv = downwindVector(wind.dirFrom);
 
   const lat = ignition[1];
   const cellLat = spanDeg / grid;
@@ -77,10 +82,63 @@ export function projectFire(ignition, wind = {}, opts = {}) {
     return [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]];
   };
 
+  // Tight hazard: burned cells dilated by one cell, merged into one rectangle per row run.
+  const hazardCellsFor = () => {
+    const mark = new Uint8Array(grid * grid);
+    for (let r = 0; r < grid; r++) for (let c = 0; c < grid; c++) {
+      if (ignitedAt[idx(r, c)] < 0) continue;
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        const nr = r + dr, nc = c + dc;
+        if (nr >= 0 && nc >= 0 && nr < grid && nc < grid) mark[idx(nr, nc)] = 1;
+      }
+    }
+    const polys = [];
+    for (let r = 0; r < grid; r++) {
+      let c = 0;
+      while (c < grid) {
+        if (!mark[idx(r, c)]) { c++; continue; }
+        const start = c;
+        while (c < grid && mark[idx(r, c)]) c++;
+        const x0 = originLon + start * cellLon, x1 = originLon + c * cellLon;
+        const y0 = originLat + r * cellLat, y1 = y0 + cellLat;
+        polys.push([[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]]);
+      }
+    }
+    return { type: 'MultiPolygon', coordinates: polys };
+  };
+
+  const buildFrame = (s, w) => {
+    const features = [];
+    const corners = [];
+    for (let r = 0; r < grid; r++) {
+      for (let c = 0; c < grid; c++) {
+        const t = ignitedAt[idx(r, c)];
+        if (t < 0) continue;
+        const ring = cellPolygon(r, c);
+        features.push({ type: 'Feature', properties: { heat: s - t + 1 }, geometry: { type: 'Polygon', coordinates: [ring] } });
+        for (const pt of ring) corners.push(pt);
+      }
+    }
+    const hullRing = convexHull(corners);
+    return {
+      step: s,
+      count: features.length,
+      wind: { speed: Math.max(0, Number(w.speed) || 0), dirFrom: Number(w.dirFrom) || 0 },
+      fire: { type: 'FeatureCollection', features },
+      hazard: { type: 'Polygon', coordinates: [hullRing.length >= 4 ? hullRing : cellPolygon(center, center)] },
+      hazardCells: hazardCellsFor(),
+    };
+  };
+
   const neighbours = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
   const frames = [];
+  if (opts.includeStart) frames.push(buildFrame(0, windAt(0) || {}));
 
   for (let s = 1; s <= steps; s++) {
+    const w = windAt(s) || {};
+    const speed = Math.max(0, Number(w.speed) || 0);
+    const windStrength = strengthPerKmh * Math.min(speed, 60); // saturates
+    const wv = downwindVector(w.dirFrom);
     const toIgnite = [];
     for (let r = 0; r < grid; r++) {
       for (let c = 0; c < grid; c++) {
@@ -98,33 +156,15 @@ export function projectFire(ignition, wind = {}, opts = {}) {
       }
     }
     for (const i of toIgnite) if (ignitedAt[i] < 0) ignitedAt[i] = s;
-
-    // build frame
-    const features = [];
-    const corners = [];
-    for (let r = 0; r < grid; r++) {
-      for (let c = 0; c < grid; c++) {
-        const t = ignitedAt[idx(r, c)];
-        if (t < 0) continue;
-        const ring = cellPolygon(r, c);
-        features.push({ type: 'Feature', properties: { heat: s - t + 1 }, geometry: { type: 'Polygon', coordinates: [ring] } });
-        for (const pt of ring) corners.push(pt);
-      }
-    }
-    const hullRing = convexHull(corners);
-    frames.push({
-      step: s,
-      count: features.length,
-      fire: { type: 'FeatureCollection', features },
-      hazard: { type: 'Polygon', coordinates: [hullRing.length >= 4 ? hullRing : cellPolygon(center, center)] },
-    });
+    frames.push(buildFrame(s, w));
   }
 
+  const w0 = windAt(1) || {};
   return {
     frames,
     meta: {
       ignition, steps, grid, spanDeg,
-      wind: { speed, dirFrom: Number(wind.dirFrom) || 0 },
+      wind: { speed: Math.max(0, Number(w0.speed) || 0), dirFrom: Number(w0.dirFrom) || 0 },
       note: 'Simulated wind-driven cellular projection. Simplified and not an operational fire model.',
     },
   };
