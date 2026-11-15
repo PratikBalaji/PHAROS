@@ -1,0 +1,98 @@
+[
+  {
+    "run": "verdugo",
+    "runName": "Verdugo Hills",
+    "geoid": "0630000",
+    "outcome": "withheld",
+    "reroutes": 0,
+    "switches": 0,
+    "withheld": 1,
+    "assembly": "Glendale College",
+    "minutes": 11,
+    "km": 5.9
+  },
+  {
+    "run": "arroyo",
+    "runName": "Arroyo Seco",
+    "geoid": "0656000",
+    "outcome": "arrived",
+    "reroutes": 1,
+    "switches": 1,
+    "withheld": 0,
+    "assembly": "Pasadena City College",
+    "minutes": 2,
+    "km": 1.2
+  },
+  {
+    "run": "altadena",
+    "runName": "Altadena Ridge",
+    "geoid": "0601290",
+    "outcome": "arrived",
+    "reroutes": 1,
+    "switches": 0,
+    "withheld": 0,
+    "assembly": "Victory Park",
+    "minutes": 6,
+    "km": 3.9
+  },
+  {
+    "run": "madre",
+    "runName": "Sierra Madre Canyon",
+    "geoid": "0671806",
+    "outcome": "arrived",
+    "reroutes": 1,
+    "switches": 1,
+    "withheld": 0,
+    "assembly": "Arcadia County Park",
+    "minutes": 10,
+    "km": 6.9
+  },
+  {
+    "run": "flintridge",
+    "runName": "Flintridge Crest",
+    "geoid": "0639003",
+    "outcome": "rerouted",
+    "reroutes": 1,
+    "switches": 1,
+    "withheld": 0,
+    "assembly": "Glendale College",
+    "minutes": 14,
+    "km": 13.6
+  },
+  {
+    "run": "santaanita",
+    "runName": "Santa Anita Wash",
+    "geoid": "0602462",
+    "outcome": "rerouted",
+    "reroutes": 3,
+    "switches": 2,
+    "withheld": 0,
+    "assembly": "Victory Park",
+    "minutes": 8,
+    "km": 8.1
+  },
+  {
+    "run": "monrovia",
+    "runName": "Monrovia Canyon",
+    "geoid": "0648648",
+    "outcome": "arrived",
+    "reroutes": 1,
+    "switches": 0,
+    "withheld": 0,
+    "assembly": "Arcadia County Park",
+    "minutes": 11,
+    "km": 7.4
+  },
+  {
+    "run": "windshift",
+    "runName": "Wind-Shift Run",
+    "geoid": "0639045",
+    "outcome": "arrived",
+    "reroutes": 1,
+    "switches": 1,
+    "withheld": 0,
+    "assembly": "Rose Bowl",
+    "minutes": 12,
+    "km": 12.1
+  }
+]
